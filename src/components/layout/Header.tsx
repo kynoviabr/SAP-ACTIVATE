@@ -1,6 +1,5 @@
 // src/components/layout/Header.tsx
 import { useNavigate } from 'react-router-dom'
-import { KynoviaMark } from '@/components/brand/KynoviaLogo'
 import { useAuthStore, useProjectStore, useUIStore } from '@/store'
 import { signOut } from '@/lib/supabase'
 
@@ -38,7 +37,20 @@ export default function Header() {
         className="flex items-center gap-3 cursor-pointer"
         onClick={() => navigate('/home')}
       >
-        <KynoviaMark className="h-9 w-9 shrink-0" title={appName} />
+        {tenant?.logo_url ? (
+          <img
+            src={tenant.logo_url}
+            alt={appName}
+            className="h-9 w-9 rounded-lg object-contain"
+          />
+        ) : (
+          <div
+            className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm text-white"
+            style={{ background: '#3B4FE8' }}
+          >
+            SP
+          </div>
+        )}
         <div>
           <div className="font-bold text-sm text-white leading-tight">{appName}</div>
           <div className="text-xs truncate max-w-[320px]" style={{ color: '#6b7280' }}>
