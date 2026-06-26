@@ -12,8 +12,10 @@ export function useProjects() {
   const setProjects = useProjectStore((s) => s.setProjects)
   const setActiveProject = useProjectStore((s) => s.setActiveProject)
   const hasSupabaseEnv = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY)
+  const isDemo = user?.id === 'demo-user'
+  const realDbEnabled = hasSupabaseEnv && !isDemo
   const demoProject = useMemo<Project | null>(() => {
-    if (hasSupabaseEnv || user?.id !== 'demo-user') return null
+    if (!isDemo) return null
     return {
       id: 'demo-project',
       tenant_id: 'demo-tenant',
@@ -42,12 +44,12 @@ export function useProjects() {
       archived: false,
       created_by: 'demo-user',
     }
-  }, [hasSupabaseEnv, user?.id])
+  }, [isDemo])
 
   const query = useQuery({
     queryKey: ['projects'],
     queryFn: projectsDB.getSummaries,
-    enabled: hasSupabaseEnv,
+    enabled: realDbEnabled,
     staleTime: 30_000,
   })
 
@@ -91,8 +93,8 @@ export function useProjects() {
   return {
     projects,
     filteredProjects: projects,
-    isLoading: hasSupabaseEnv ? query.isLoading : false,
-    isFetching: hasSupabaseEnv ? query.isFetching : false,
+    isLoading: realDbEnabled ? query.isLoading : false,
+    isFetching: realDbEnabled ? query.isFetching : false,
     error: query.error,
     refetch: query.refetch,
     createProject: createMutation,

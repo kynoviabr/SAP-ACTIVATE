@@ -10,18 +10,20 @@ export function useTasks(projectId?: string, phase?: PhaseNumber) {
   const activeProject = useProjectStore((s) => s.activeProject)
   const id = projectId ?? activeProject?.id
   const hasSupabaseEnv = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY)
+  const isDemo = user?.id === 'demo-user'
+  const realDbEnabled = hasSupabaseEnv && !isDemo
 
   const query = useQuery({
     queryKey: ['tasks', id, phase],
     queryFn: () => phase ? tasksDB.listByPhase(id!, phase) : tasksDB.list(id!),
-    enabled: Boolean(id) && hasSupabaseEnv,
+    enabled: Boolean(id) && realDbEnabled,
     staleTime: 30_000,
   })
 
   const fallbackTasks = useMemo(() => {
-    if (hasSupabaseEnv || user?.id !== 'demo-user') return []
+    if (!isDemo) return []
     return seedTasks(id ?? 'demo-project').filter((task) => !phase || task.phase === phase)
-  }, [hasSupabaseEnv, id, phase, user?.id])
+  }, [id, isDemo, phase])
   const tasks = query.data ?? fallbackTasks
   const spiData = useMemo(() => calculateSPI(tasks), [tasks])
 
@@ -43,7 +45,7 @@ export function useTasks(projectId?: string, phase?: PhaseNumber) {
 
   return {
     tasks,
-    isLoading: hasSupabaseEnv ? query.isLoading : false,
+    isLoading: realDbEnabled ? query.isLoading : false,
     error: query.error,
     refetch: query.refetch,
     spiData,
@@ -55,6 +57,16 @@ export function useTasks(projectId?: string, phase?: PhaseNumber) {
 
 function seedTasks(projectId: string): Task[] {
   const now = '2026-06-26T00:00:00.000Z'
+  return buildActivateTaskInputs(projectId).map((row, index) => ({
+    id: `demo-task-${index + 1}`,
+    tenant_id: 'demo-tenant',
+    created_at: now,
+    updated_at: now,
+    ...row,
+  }))
+}
+
+export function buildActivateTaskInputs(projectId: string): CreateTaskInput[] {
   const rows: Array<Pick<Task, 'wbs' | 'title' | 'phase' | 'type' | 'start_date' | 'end_date' | 'assignee' | 'status' | 'progress_pct' | 'planned_hours' | 'actual_hours' | 'sort_order'>> = [
     { wbs: '1.0', title: 'Prepare', phase: '1', type: 'phase', start_date: '2026-06-01', end_date: '2026-06-21', assignee: 'PMO', status: 'em_andamento', progress_pct: 80, planned_hours: 80, actual_hours: 64, sort_order: 10 },
     { wbs: '1.1', title: 'Kickoff do Projeto', phase: '1', type: 'milestone', start_date: '2026-06-03', end_date: '2026-06-03', assignee: 'GP', status: 'concluido', progress_pct: 100, planned_hours: 8, actual_hours: 8, sort_order: 11 },
@@ -87,12 +99,8 @@ function seedTasks(projectId: string): Task[] {
     { wbs: '5.4', title: 'Quality Gate Fase 5', phase: '5', type: 'milestone', start_date: '2026-10-08', end_date: '2026-10-08', assignee: 'Sponsor', status: 'pendente', progress_pct: 0, planned_hours: 8, actual_hours: 0, sort_order: 54 },
   ]
 
-  return rows.map((row, index) => ({
-    id: `demo-task-${index + 1}`,
-    tenant_id: 'demo-tenant',
+  return rows.map((row) => ({
     project_id: projectId,
-    created_at: now,
-    updated_at: now,
     parent_id: undefined,
     duration_days: row.start_date && row.end_date ? Math.max(1, (new Date(`${row.end_date}T12:00:00`).getTime() - new Date(`${row.start_date}T12:00:00`).getTime()) / 86_400_000 + 1) : undefined,
     dependencies: [],
