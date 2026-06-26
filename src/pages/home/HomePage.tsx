@@ -39,9 +39,9 @@ export default function HomePage() {
     <div className="mx-auto max-w-7xl px-6 py-8">
       <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-brand-600">SAP Activate Portal</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-brand-600">KYNOVIA PROJECT MANAGEMENT</p>
           <h1 className="mt-1 text-2xl font-bold text-text-primary">Meus Projetos</h1>
-          <p className="mt-1 text-sm text-text-secondary">Gestão sistêmica de projetos, fases, pendências e indicadores.</p>
+          <p className="mt-1 text-sm text-text-secondary">SAP Activate Methodology</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <span className="badge badge-blue">{filtered.length} exibidos</span>

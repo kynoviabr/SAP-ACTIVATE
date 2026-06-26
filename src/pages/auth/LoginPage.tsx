@@ -101,7 +101,7 @@ export default function AuthPage() {
       id: 'demo-tenant',
       tenant_id: 'demo-tenant',
       slug: 'demo',
-      name: 'SAP Activate Demo',
+      name: 'KYNOVIA PROJECT MANAGEMENT',
       primary_color: '#3B4FE8',
       secondary_color: '#1E2A78',
       accent_color: '#F59E0B',
@@ -202,9 +202,12 @@ export default function AuthPage() {
 
         {/* Title */}
         <h1 className="text-2xl font-bold mb-1" style={{ color: '#1E2A78' }}>
-          SAP Activate Portal
+          KYNOVIA PROJECT MANAGEMENT
         </h1>
-        <p className="text-sm mb-6" style={{ color: '#6b7280' }}>
+        <p className="text-sm mb-1" style={{ color: '#6b7280' }}>
+          SAP Activate Methodology
+        </p>
+        <p className="text-xs mb-6" style={{ color: '#9ca3af' }}>
           Acesse com sua conta para continuar
         </p>
         {!isSupabaseConfigured && (

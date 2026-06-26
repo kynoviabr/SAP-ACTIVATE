@@ -21,10 +21,8 @@ export default function Header() {
     .join('')
     .toUpperCase() ?? 'U'
 
-  const appName = tenant?.name ?? import.meta.env.VITE_APP_NAME ?? 'SAP Activate Portal'
-  const subtitle = activeProject
-    ? `${activeProject.name} | ${activeProject.client}`
-    : 'Gestão de Projetos'
+  const appName = import.meta.env.VITE_APP_NAME ?? 'KYNOVIA PROJECT MANAGEMENT'
+  const subtitle = 'SAP Activate Methodology'
 
   return (
     <header

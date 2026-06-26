@@ -107,7 +107,7 @@ function applyTenantTheme(tenant: Tenant) {
   root.style.setProperty('--color-primary',   tenant.primary_color   ?? '#3B4FE8')
   root.style.setProperty('--color-secondary', tenant.secondary_color ?? '#1E2A78')
   root.style.setProperty('--color-accent',    tenant.accent_color    ?? '#F59E0B')
-  document.title = `${tenant.name} — Portal de Projetos SAP`
+  document.title = `${tenant.name} — SAP Activate Methodology`
 
   const favicon = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
   if (favicon && tenant.logo_url) favicon.href = tenant.logo_url

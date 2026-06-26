@@ -227,7 +227,7 @@ export function applyTenantTheme(tenant: {
   if (tenant.primary_color)   root.style.setProperty('--brand-600', tenant.primary_color)
   if (tenant.secondary_color) root.style.setProperty('--brand-700', tenant.secondary_color)
   if (tenant.accent_color)    root.style.setProperty('--accent', tenant.accent_color)
-  if (tenant.name) document.title = `${tenant.name} — Portal de Projetos SAP`
+  if (tenant.name) document.title = `${tenant.name} — SAP Activate Methodology`
   const favicon = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
   if (favicon && tenant.logo_url) favicon.href = tenant.logo_url
 }
