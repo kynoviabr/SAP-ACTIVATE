@@ -1,4 +1,5 @@
 import { Archive, CalendarClock, ExternalLink, Trash2 } from 'lucide-react'
+import { StatusIcon } from '@/components/ui/AppIcons'
 import { calcDaysToGoLive, PHASE_LABELS, STATUS_COLORS } from '@/lib/utils'
 import type { Project } from '@/types'
 
@@ -21,7 +22,10 @@ export default function ProjectCard({ project, active, onOpen, onArchive, onTras
     >
       <div className="flex items-start justify-between gap-3">
         <span className="badge badge-blue">Fase {project.current_phase} {PHASE_LABELS[project.current_phase].short}</span>
-        <span className="badge" style={{ background: status.bg, color: status.text }}>{status.icon} {project.status}</span>
+        <span className="badge" style={{ background: status.bg, color: status.text }}>
+          <StatusIcon status={project.status} />
+          {project.status}
+        </span>
       </div>
 
       <div className="mt-4">

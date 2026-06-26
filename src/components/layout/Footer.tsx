@@ -1,4 +1,5 @@
 // src/components/layout/Footer.tsx
+import { AppIcon } from '@/components/ui/AppIcons'
 import { useUIStore } from '@/store'
 
 export default function Footer() {
@@ -7,7 +8,10 @@ export default function Footer() {
     <footer className="flex items-center justify-between px-6 py-3 text-xs shrink-0"
       style={{ borderTop: '1px solid #2e3460', color: '#4b5563' }}>
       <div className="flex items-center gap-2">
-        <span className="badge badge-blue" style={{ fontSize: 10 }}>⚙️ GESTÃO SISTÊMICA</span>
+        <span className="badge badge-blue" style={{ fontSize: 10 }}>
+          <AppIcon.performance className="h-3 w-3" />
+          GESTÃO SISTÊMICA
+        </span>
         <span>KYNOVIA PROJECT MANAGEMENT v{import.meta.env.VITE_APP_VERSION ?? '2.0'}</span>
       </div>
       <span>© {new Date().getFullYear()} · SAP Activate Methodology</span>

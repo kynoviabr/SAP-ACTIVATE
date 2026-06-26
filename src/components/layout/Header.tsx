@@ -1,5 +1,6 @@
 // src/components/layout/Header.tsx
 import { useNavigate } from 'react-router-dom'
+import { AppIcon } from '@/components/ui/AppIcons'
 import { useAuthStore, useProjectStore, useUIStore } from '@/store'
 import { signOut } from '@/lib/supabase'
 
@@ -67,7 +68,8 @@ export default function Header() {
           className="btn-secondary btn-sm flex items-center gap-1.5"
           onClick={() => activeProject ? navigate(`/projects/${activeProject.id}/issues`) : openModal('issues')}
         >
-          ⚠️ Issues
+          <AppIcon.issues className="h-3.5 w-3.5" />
+          Issues
           {unreadCount > 0 && (
             <span className="badge badge-amber" style={{ fontSize: 10 }}>
               {unreadCount}
@@ -77,25 +79,28 @@ export default function Header() {
 
         {/* Risks */}
         <button
-          className="btn-secondary btn-sm"
+          className="btn-secondary btn-sm flex items-center gap-1.5"
           onClick={() => activeProject ? navigate(`/projects/${activeProject.id}/risks`) : openModal('risks')}
         >
-          🎯 Riscos
+          <AppIcon.risks className="h-3.5 w-3.5" />
+          Riscos
         </button>
 
         {/* AI Assistant */}
         {activeProject && (
           <button
-            className="btn-secondary btn-sm"
+            className="btn-secondary btn-sm flex items-center gap-1.5"
             onClick={() => navigate(`/projects/${activeProject.id}/assistant`)}
           >
-            ✦ IA
+            <AppIcon.ai className="h-3.5 w-3.5" />
+            IA
           </button>
         )}
 
         {/* Language */}
-        <button className="btn-secondary btn-sm">
-          🌐 PT-BR
+        <button className="btn-secondary btn-sm flex items-center gap-1.5">
+          <AppIcon.language className="h-3.5 w-3.5" />
+          PT-BR
         </button>
 
         {/* Avatar + role */}
@@ -120,8 +125,9 @@ export default function Header() {
         </div>
 
         {/* Logout */}
-        <button className="btn-secondary btn-sm" onClick={handleLogout}>
-          ⏻ Sair
+        <button className="btn-secondary btn-sm flex items-center gap-1.5" onClick={handleLogout}>
+          <AppIcon.logout className="h-3.5 w-3.5" />
+          Sair
         </button>
       </div>
     </header>

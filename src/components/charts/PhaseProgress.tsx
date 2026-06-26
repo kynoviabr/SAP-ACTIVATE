@@ -1,3 +1,4 @@
+import { PhaseIcon } from '@/components/ui/AppIcons'
 import { PHASE_INFO, type PhaseNumber } from '@/types'
 
 type PhaseProgressItem = {
@@ -29,7 +30,10 @@ export default function PhaseProgress({ items }: PhaseProgressProps) {
           return (
             <div key={phase}>
               <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="font-semibold text-text-primary">{info.icon} {info.short}</span>
+                <span className="flex items-center gap-2 font-semibold text-text-primary">
+                  <PhaseIcon phase={phase} className="h-4 w-4" style={{ color: info.color }} />
+                  {info.short}
+                </span>
                 <span className="text-text-secondary">
                   {item?.completed ?? 0}/{item?.total ?? 0} - {Math.round(progress)}%
                 </span>

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { AppIcon } from '@/components/ui/AppIcons'
 import { useAuthStore, useProjectStore } from '@/store'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 import type { Project } from '@/types'
@@ -205,8 +206,9 @@ export default function AuthPage() {
       <div className="relative w-full max-w-[430px] animate-fade-in rounded-[14px] border border-[rgba(255,255,255,0.06)] bg-[#111112]/95 p-8 shadow-2xl shadow-black/40 backdrop-blur">
         <button
           className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[#18181A] text-sm text-[#A1A1AA] transition hover:border-[rgba(255,255,255,0.13)] hover:text-[#F4F4F5]"
+          aria-label="Selecionar idioma"
         >
-          🌐
+          <AppIcon.language className="h-4 w-4" />
         </button>
 
         <a className="mb-7 inline-flex text-base font-bold tracking-[-0.2px] text-[#F4F4F5]" href="/login">

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { CheckCircle2, Circle, Lock, PlayCircle } from 'lucide-react'
+import { PhaseIcon } from '@/components/ui/AppIcons'
 import { PHASE_INFO, type PhaseNumber } from '@/types'
 import { useTasks } from '@/hooks/useTasks'
 
@@ -63,7 +64,10 @@ export default function PhasePage() {
     <div className="mx-auto max-w-6xl px-6 py-8">
       <header className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <span className="badge" style={{ background: info.color, color: '#fff' }}>{info.icon} {info.label}</span>
+          <span className="badge" style={{ background: info.color, color: '#fff' }}>
+            <PhaseIcon phase={phaseNumber} className="h-3.5 w-3.5" />
+            {info.label}
+          </span>
           <h1 className="mt-3 text-2xl font-bold text-text-primary">{info.short}</h1>
           <p className="mt-1 text-sm text-text-secondary">{visibleTemplates.length} templates disponíveis nesta fase.</p>
         </div>

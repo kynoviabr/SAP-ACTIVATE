@@ -110,10 +110,10 @@ export function getSeverity(exposure: number): RiskSeverity {
 
 // ── Color maps ────────────────────────────────────────────────────────────
 export const STATUS_COLORS: Record<ProjectStatus, { bg: string; text: string; icon: string }> = {
-  verde:    { bg: '#064e3b', text: '#34d399', icon: '🟢' },
-  amarelo:  { bg: '#78350f', text: '#fcd34d', icon: '🟡' },
-  vermelho: { bg: '#7f1d1d', text: '#fca5a5', icon: '🔴' },
-  encerrado:{ bg: '#1f2937', text: '#9ca3af', icon: '🏁' },
+  verde:    { bg: '#064e3b', text: '#34d399', icon: 'check' },
+  amarelo:  { bg: '#78350f', text: '#fcd34d', icon: 'warning' },
+  vermelho: { bg: '#7f1d1d', text: '#fca5a5', icon: 'alert' },
+  encerrado:{ bg: '#1f2937', text: '#9ca3af', icon: 'closed' },
 }
 
 export const SEVERITY_COLORS: Record<RiskSeverity, { bg: string; text: string; border?: string }> = {
@@ -124,10 +124,10 @@ export const SEVERITY_COLORS: Record<RiskSeverity, { bg: string; text: string; b
 }
 
 export const PRIORITY_COLORS: Record<IssuePriority, { bg: string; text: string; label: string }> = {
-  baixa:   { bg: '#064e3b', text: '#34d399', label: '🟢 Baixa' },
-  media:   { bg: '#1e3a8a', text: '#93c5fd', label: '🟡 Média' },
-  alta:    { bg: '#78350f', text: '#fcd34d', label: '🟠 Alta' },
-  critica: { bg: '#7f1d1d', text: '#fca5a5', label: '🔴 Crítica' },
+  baixa:   { bg: '#064e3b', text: '#34d399', label: 'Baixa' },
+  media:   { bg: '#1e3a8a', text: '#93c5fd', label: 'Média' },
+  alta:    { bg: '#78350f', text: '#fcd34d', label: 'Alta' },
+  critica: { bg: '#7f1d1d', text: '#fca5a5', label: 'Crítica' },
 }
 
 export const PHASE_COLORS: Record<PhaseNumber, string> = {
@@ -139,11 +139,11 @@ export const PHASE_COLORS: Record<PhaseNumber, string> = {
 }
 
 export const PHASE_LABELS: Record<PhaseNumber, { label: string; short: string; icon: string }> = {
-  '1': { label: 'Fase 1 — Prepare', short: 'Prepare', icon: '⏱' },
-  '2': { label: 'Fase 2 — Explore', short: 'Explore', icon: '🔍' },
-  '3': { label: 'Fase 3 — Realize', short: 'Realize', icon: '⚙️' },
-  '4': { label: 'Fase 4 — Deploy',  short: 'Deploy',  icon: '🚀' },
-  '5': { label: 'Fase 5 — Run',     short: 'Run',     icon: '📋' },
+  '1': { label: 'Fase 1 — Prepare', short: 'Prepare', icon: 'compass' },
+  '2': { label: 'Fase 2 — Explore', short: 'Explore', icon: 'search' },
+  '3': { label: 'Fase 3 — Realize', short: 'Realize', icon: 'settings' },
+  '4': { label: 'Fase 4 — Deploy',  short: 'Deploy',  icon: 'rocket' },
+  '5': { label: 'Fase 5 — Run',     short: 'Run',     icon: 'clipboard' },
 }
 
 // ── Gantt helpers ─────────────────────────────────────────────────────────

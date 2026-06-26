@@ -356,11 +356,11 @@ export type UpdateTravelInput = Partial<CreateTravelInput>
 
 // ── Constants ─────────────────────────────────────────────────
 export const PHASE_INFO = {
-  '1': { label: 'Fase 1 — Prepare', short: 'Prepare', icon: '⏱', color: '#10b981' },
-  '2': { label: 'Fase 2 — Explore', short: 'Explore', icon: '🔍', color: '#F59E0B' },
-  '3': { label: 'Fase 3 — Realize', short: 'Realize', icon: '⚙️', color: '#3B4FE8' },
-  '4': { label: 'Fase 4 — Deploy',  short: 'Deploy',  icon: '🚀', color: '#8b5cf6' },
-  '5': { label: 'Fase 5 — Run',     short: 'Run',     icon: '📋', color: '#ec4899' },
+  '1': { label: 'Fase 1 — Prepare', short: 'Prepare', icon: 'compass', color: '#10b981' },
+  '2': { label: 'Fase 2 — Explore', short: 'Explore', icon: 'search', color: '#F59E0B' },
+  '3': { label: 'Fase 3 — Realize', short: 'Realize', icon: 'settings', color: '#3B4FE8' },
+  '4': { label: 'Fase 4 — Deploy',  short: 'Deploy',  icon: 'rocket', color: '#8b5cf6' },
+  '5': { label: 'Fase 5 — Run',     short: 'Run',     icon: 'clipboard', color: '#ec4899' },
 } as const
 
 export const SAP_MODULES = ['FI','CO','MM','SD','PP','HR','BI/BW','BASIS','ABAP','WM','PM','QM','PS']

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useMemo, useRef, useState } from 'react'
 import { Send, Paperclip } from 'lucide-react'
 import { useParams } from 'react-router-dom'
+import { StatusIcon } from '@/components/ui/AppIcons'
 import { useAI } from '@/hooks/useAI'
 import { useIssues } from '@/hooks/useIssues'
 import { useProject } from '@/hooks/useProjects'
@@ -136,7 +137,14 @@ export default function AIAssistantPage() {
           <KeyValue label="GP" value={project?.project_manager ?? '-'} />
           <KeyValue label="Fase" value={project ? PHASE_LABELS[project.current_phase].short : '-'} />
           <KeyValue label="Go-Live" value={project ? `${calcDaysToGoLive(project.golive_date)} dias` : '-'} />
-          <div className="mt-2">{rag ? <span className="badge" style={{ background: rag.bg, color: rag.text }}>{project?.status}</span> : null}</div>
+          <div className="mt-2">
+            {rag && project ? (
+              <span className="badge" style={{ background: rag.bg, color: rag.text }}>
+                <StatusIcon status={project.status} />
+                {project.status}
+              </span>
+            ) : null}
+          </div>
         </Panel>
 
         <Panel title="Provedor de IA">
