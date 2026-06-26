@@ -7,7 +7,11 @@ const supabaseKey =
   (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ||
   'dev-placeholder-anon-key'
 
-if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+export const isSupabaseConfigured = Boolean(
+  import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
+)
+
+if (!isSupabaseConfigured) {
   console.warn('Missing Supabase env vars. Using local development placeholders.')
 }
 

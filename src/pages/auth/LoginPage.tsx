@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useAuthStore, useProjectStore } from '@/store'
-import { supabase } from '@/lib/supabase'
+import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 import type { Project } from '@/types'
 
 type Tab = 'login' | 'register' | 'reset'
@@ -56,6 +56,10 @@ export default function AuthPage() {
     setError(null)
     if (data.email === 'demo@sap.local' && data.password === 'demo1234') {
       handleDemoLogin()
+      return
+    }
+    if (!isSupabaseConfigured) {
+      setError('Login real indisponível: configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env.local. Use demo@sap.local / demo1234 enquanto isso.')
       return
     }
     await login(data.email, data.password)
@@ -130,6 +134,10 @@ export default function AuthPage() {
 
   const handleRegister = async (data: RegisterForm) => {
     setError(null)
+    if (!isSupabaseConfigured) {
+      setError('Cadastro indisponível: configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env.local.')
+      return
+    }
     setRegLoading(true)
     try {
       const { error: err } = await supabase.auth.signUp({
@@ -153,6 +161,10 @@ export default function AuthPage() {
 
   const handleReset = async (data: ResetForm) => {
     setError(null)
+    if (!isSupabaseConfigured) {
+      setError('Redefinição indisponível: configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env.local.')
+      return
+    }
     setResetLoading(true)
     try {
       const { error: err } = await supabase.auth.updateUser({ password: data.password })
@@ -195,6 +207,11 @@ export default function AuthPage() {
         <p className="text-sm mb-6" style={{ color: '#6b7280' }}>
           Acesse com sua conta para continuar
         </p>
+        {!isSupabaseConfigured && (
+          <div className="mb-4 px-4 py-3 rounded-lg text-xs" style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa', lineHeight: 1.5 }}>
+            Supabase ainda não configurado neste ambiente. Login real, cadastro e reset ficam bloqueados; o modo demo continua disponível.
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex border-b mb-6" style={{ borderColor: '#e5e7eb' }}>
