@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { KynoviaWordmark } from '@/components/brand/KynoviaLogo'
 import { useAuthStore, useProjectStore } from '@/store'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 import type { Project } from '@/types'
@@ -209,8 +210,8 @@ export default function AuthPage() {
           🌐
         </button>
 
-        <a className="mb-7 inline-flex text-base font-bold tracking-[-0.2px] text-[#F4F4F5]" href="/login">
-          Kynov<b className="font-bold text-[#3B82F6]">ia</b>
+        <a className="mb-7 inline-flex" href="/login" aria-label="Kynovia">
+          <KynoviaWordmark className="h-8 w-[128px]" />
         </a>
 
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[rgba(37,99,235,0.22)] bg-[rgba(37,99,235,0.10)] py-[5px] pl-2 pr-3.5 font-mono text-[11.5px] font-medium tracking-[0.04em] text-[#93C5FD]">
