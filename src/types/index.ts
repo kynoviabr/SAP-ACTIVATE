@@ -1,0 +1,366 @@
+// ── Enums ─────────────────────────────────────────────────────
+export type UserRole      = 'ADMIN' | 'USER' | 'VIEWER'
+export type ProjectStatus = 'verde' | 'amarelo' | 'vermelho' | 'encerrado'
+export type PhaseNumber   = '1' | '2' | '3' | '4' | '5'
+export type TaskStatus    = 'pendente' | 'em_andamento' | 'concluido' | 'atrasado' | 'cancelado'
+export type TaskType      = 'phase' | 'task' | 'milestone'
+export type IssueStatus   = 'aberta' | 'em_andamento' | 'resolvida' | 'atrasada' | 'cancelada'
+export type IssuePriority = 'baixa' | 'media' | 'alta' | 'critica'
+export type IssueType     = 'tecnica' | 'processo' | 'gestao' | 'cliente' | 'escopo'
+export type RiskStatus    = 'identificado' | 'em_mitigacao' | 'mitigado' | 'ocorrido'
+export type RiskCategory  = 'tecnico' | 'prazo' | 'recursos' | 'escopo' | 'externo' | 'qualidade'
+export type RiskSeverity  = 'baixo' | 'medio' | 'alto' | 'critico'
+export type QGAnswerType  = 'sim' | 'nao' | 'na'
+export type BPDStatus     = 'pendente' | 'em_andamento' | 'concluido'
+export type AIProvider    = 'openai' | 'anthropic' | 'gemini'
+
+export interface ProjectFilters {
+  search?: string
+  client?: string
+  project_manager?: string
+  current_phase?: PhaseNumber | ''
+  status?: ProjectStatus | ''
+}
+
+// ── Base ──────────────────────────────────────────────────────
+export interface BaseEntity {
+  id: string
+  tenant_id: string
+  created_at: string
+  updated_at?: string
+}
+
+// ── Tenant ────────────────────────────────────────────────────
+export interface Tenant extends BaseEntity {
+  slug: string
+  name: string
+  logo_url?: string
+  primary_color: string
+  secondary_color: string
+  accent_color: string
+  domain?: string
+  plan: 'free' | 'professional' | 'enterprise'
+  max_projects: number
+  max_users: number
+  ai_provider: AIProvider
+  ai_model: string
+  active: boolean
+}
+
+// ── User ──────────────────────────────────────────────────────
+export interface User extends BaseEntity {
+  full_name: string
+  email: string
+  role: UserRole
+  avatar_url?: string
+  active: boolean
+  last_login?: string
+}
+
+// ── Project ───────────────────────────────────────────────────
+export interface Project extends BaseEntity {
+  name: string
+  client: string
+  project_manager: string
+  pm_user_id?: string
+  sponsor?: string
+  sponsor_email?: string
+  objective?: string
+  methodology: string
+  current_phase: PhaseNumber
+  status: ProjectStatus
+  start_date: string
+  golive_date: string
+  spi: number
+  cpi: number
+  progress_pct: number
+  planned_value: number
+  earned_value: number
+  actual_cost: number
+  modules: string[]
+  tags: string[]
+  active: boolean
+  archived: boolean
+  created_by?: string
+}
+
+export type CreateProjectInput = Omit<Project, 'id'|'tenant_id'|'created_at'|'updated_at'|'spi'|'cpi'|'status'>
+export type UpdateProjectInput = Partial<CreateProjectInput>
+
+// ── Project Member ────────────────────────────────────────────
+export interface ProjectMember extends BaseEntity {
+  project_id: string
+  user_id?: string
+  full_name: string
+  email: string
+  role: UserRole
+  module?: string
+  function?: string
+  is_leader: boolean
+  company?: string
+  active: boolean
+}
+
+export type ProjectMemberInput = Omit<ProjectMember, 'id'|'created_at'|'updated_at'>
+
+// ── Task ──────────────────────────────────────────────────────
+export interface Task extends BaseEntity {
+  project_id: string
+  parent_id?: string
+  wbs: string
+  title: string
+  phase?: PhaseNumber
+  type: TaskType
+  start_date?: string
+  end_date?: string
+  duration_days?: number
+  assignee?: string
+  status: TaskStatus
+  progress_pct: number
+  planned_hours: number
+  actual_hours: number
+  dependencies: string[]
+  notes?: string
+  sort_order: number
+}
+
+export type CreateTaskInput = Omit<Task, 'id'|'tenant_id'|'created_at'|'updated_at'>
+export type UpdateTaskInput = Partial<CreateTaskInput>
+
+// ── Issue ─────────────────────────────────────────────────────
+export interface Issue extends BaseEntity {
+  project_id: string
+  issue_number: number
+  code: string
+  description: string
+  issue_type: IssueType
+  priority: IssuePriority
+  phase?: PhaseNumber
+  status: IssueStatus
+  assignee?: string
+  opened_by?: string
+  due_date?: string
+  resolved_at?: string
+  action_plan?: string
+  resolution?: string
+}
+
+export type CreateIssueInput = Omit<Issue, 'id'|'tenant_id'|'created_at'|'updated_at'|'issue_number'|'code'>
+export type UpdateIssueInput = Partial<CreateIssueInput>
+
+// ── Risk ──────────────────────────────────────────────────────
+export interface Risk extends BaseEntity {
+  project_id: string
+  risk_number: number
+  code: string
+  description: string
+  category: RiskCategory
+  phase?: PhaseNumber
+  impact: number
+  probability: number
+  exposure: number
+  severity: RiskSeverity
+  status: RiskStatus
+  assignee?: string
+  mitigation?: string
+  contingency?: string
+  occurred_at?: string
+}
+
+export type CreateRiskInput = Omit<Risk, 'id'|'tenant_id'|'created_at'|'updated_at'|'risk_number'|'code'|'exposure'|'severity'>
+export type UpdateRiskInput = Partial<CreateRiskInput>
+
+// ── BPD ───────────────────────────────────────────────────────
+export interface BPDItem extends BaseEntity {
+  project_id: string
+  bpd_id: string
+  module: string
+  process_name: string
+  version: string
+  priority: 'alta' | 'media' | 'baixa'
+  item_type: 'obrigatorio' | 'desejavel' | 'futuro'
+  status: BPDStatus
+  legal_refs?: string
+  consultant?: string
+  key_user?: string
+  reviewer?: string
+  approver?: string
+  as_is?: string
+  to_be?: string
+  triggers?: string
+  solution?: string
+  gap_type: 'standard' | 'config' | 'development'
+  complexity: 'baixa' | 'media' | 'alta' | 'critica'
+  effort_hours: number
+  acceptance?: string
+  exclusions?: string
+  client_signed: boolean
+  sort_order: number
+}
+
+export type CreateBPDInput = Omit<BPDItem, 'id'|'tenant_id'|'created_at'|'updated_at'>
+export type UpdateBPDInput = Partial<CreateBPDInput>
+
+// ── Quality Gate ──────────────────────────────────────────────
+export interface QGTemplate {
+  id: string
+  tenant_id?: string
+  phase: PhaseNumber
+  description: string
+  required: boolean
+  sort_order: number
+  active: boolean
+}
+
+export interface QGAnswerRecord extends BaseEntity {
+  project_id: string
+  template_id: string
+  phase: PhaseNumber
+  answer?: QGAnswerType
+  notes?: string
+  answered_by?: string
+  answered_at?: string
+}
+
+export interface QGDecision extends BaseEntity {
+  project_id: string
+  phase: PhaseNumber
+  decision: 'aprovado' | 'rejeitado'
+  comments?: string
+  decided_by?: string
+  decided_at: string
+}
+
+// ── Kickoff ───────────────────────────────────────────────────
+export interface Kickoff extends BaseEntity {
+  project_id: string
+  kickoff_date?: string
+  location?: string
+  platform: string
+  duration_hours: number
+  modality: 'remoto' | 'presencial' | 'hibrido'
+  objective?: string
+  agenda?: string
+  results?: string
+  decisions?: string
+  next_steps?: string
+  gp_signed_at?: string
+  sponsor_signed_at?: string
+  presentation_url?: string
+  minutes_url?: string
+  ai_generated: boolean
+  ai_content: Record<string, unknown>
+}
+
+// ── AI ────────────────────────────────────────────────────────
+export interface AIMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+}
+
+export interface ProjectContext {
+  projectId: string
+  projectName: string
+  client: string
+  currentPhase: PhaseNumber
+  status: ProjectStatus
+  spi: number
+  progress: number
+  goLiveDate: string
+  openIssues: number
+  criticalRisks: number
+  modules: string[]
+}
+
+// ── Activity ──────────────────────────────────────────────────
+export interface ActivityLog extends BaseEntity {
+  project_id?: string
+  user_id?: string
+  user_name?: string
+  action: string
+  entity_type: string
+  entity_id?: string
+  entity_label?: string
+}
+
+// ── Notification ──────────────────────────────────────────────
+export interface Notification extends BaseEntity {
+  user_id: string
+  project_id?: string
+  type: string
+  title: string
+  body?: string
+  read: boolean
+  read_at?: string
+}
+
+// ── Transversal Modules ───────────────────────────────────────
+export interface CostItem extends BaseEntity {
+  project_id: string
+  description: string
+  category?: string
+  amount: number
+  currency: string
+  date?: string
+  notes?: string
+}
+
+export type CreateCostInput = Omit<CostItem, 'id'|'tenant_id'|'created_at'|'updated_at'>
+export type UpdateCostInput = Partial<CreateCostInput>
+
+export interface ChangeRequest extends BaseEntity {
+  project_id: string
+  cr_number: number
+  title: string
+  description?: string
+  impact?: string
+  requester?: string
+  status: 'aberta' | 'aprovada' | 'rejeitada' | 'cancelada'
+  decision_date?: string
+  notes?: string
+}
+
+export type CreateChangeRequestInput = Omit<ChangeRequest, 'id'|'tenant_id'|'created_at'|'updated_at'|'cr_number'>
+export type UpdateChangeRequestInput = Partial<CreateChangeRequestInput>
+
+export interface BillingItem extends BaseEntity {
+  project_id: string
+  milestone: string
+  amount: number
+  currency: string
+  due_date?: string
+  invoice_date?: string
+  payment_date?: string
+  status: 'pendente' | 'faturado' | 'pago' | 'cancelado'
+  notes?: string
+}
+
+export type CreateBillingInput = Omit<BillingItem, 'id'|'tenant_id'|'created_at'|'updated_at'>
+export type UpdateBillingInput = Partial<CreateBillingInput>
+
+export interface TravelItem extends BaseEntity {
+  project_id: string
+  traveler: string
+  destination?: string
+  departure_date?: string
+  return_date?: string
+  purpose?: string
+  estimated_cost?: number
+  actual_cost?: number
+  status: 'solicitada' | 'aprovada' | 'realizada' | 'cancelada'
+  notes?: string
+}
+
+export type CreateTravelInput = Omit<TravelItem, 'id'|'tenant_id'|'created_at'|'updated_at'>
+export type UpdateTravelInput = Partial<CreateTravelInput>
+
+// ── Constants ─────────────────────────────────────────────────
+export const PHASE_INFO = {
+  '1': { label: 'Fase 1 — Prepare', short: 'Prepare', icon: '⏱', color: '#10b981' },
+  '2': { label: 'Fase 2 — Explore', short: 'Explore', icon: '🔍', color: '#F59E0B' },
+  '3': { label: 'Fase 3 — Realize', short: 'Realize', icon: '⚙️', color: '#3B4FE8' },
+  '4': { label: 'Fase 4 — Deploy',  short: 'Deploy',  icon: '🚀', color: '#8b5cf6' },
+  '5': { label: 'Fase 5 — Run',     short: 'Run',     icon: '📋', color: '#ec4899' },
+} as const
+
+export const SAP_MODULES = ['FI','CO','MM','SD','PP','HR','BI/BW','BASIS','ABAP','WM','PM','QM','PS']
