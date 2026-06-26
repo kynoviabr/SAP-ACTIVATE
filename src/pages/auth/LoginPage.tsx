@@ -186,47 +186,58 @@ export default function AuthPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: 'linear-gradient(135deg, #1E2A78 0%, #3B4FE8 100%)' }}
+      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0A0A0B] p-6"
+      style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
     >
       <div
-        className="bg-white rounded-[20px] shadow-2xl w-full max-w-md p-8 relative animate-fade-in"
-      >
-        {/* Language toggle */}
+        className="pointer-events-none absolute inset-0 opacity-70"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(59,130,246,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.045) 1px, transparent 1px)',
+          backgroundSize: '56px 56px',
+          WebkitMaskImage: 'radial-gradient(ellipse 70% 80% at 50% 40%, black 20%, transparent 80%)',
+          maskImage: 'radial-gradient(ellipse 70% 80% at 50% 40%, black 20%, transparent 80%)',
+        }}
+      />
+      <div className="pointer-events-none absolute right-[-140px] top-[-120px] h-[420px] w-[520px] rounded-full bg-[rgba(37,99,235,0.16)] blur-[110px]" />
+      <div className="pointer-events-none absolute bottom-[-130px] left-[-120px] h-[320px] w-[380px] rounded-full bg-[rgba(59,130,246,0.08)] blur-[100px]" />
+
+      <div className="relative w-full max-w-[430px] animate-fade-in rounded-[14px] border border-[rgba(255,255,255,0.06)] bg-[#111112]/95 p-8 shadow-2xl shadow-black/40 backdrop-blur">
         <button
-          className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center text-sm text-white hover:opacity-80 transition"
-          style={{ background: '#1a1f3a' }}
+          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[#18181A] text-sm text-[#A1A1AA] transition hover:border-[rgba(255,255,255,0.13)] hover:text-[#F4F4F5]"
         >
           🌐
         </button>
 
-        {/* Title */}
-        <h1 className="text-2xl font-bold mb-1" style={{ color: '#1E2A78' }}>
+        <a className="mb-7 inline-flex text-base font-bold tracking-[-0.2px] text-[#F4F4F5]" href="/login">
+          Kynov<b className="font-bold text-[#3B82F6]">ia</b>
+        </a>
+
+        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[rgba(37,99,235,0.22)] bg-[rgba(37,99,235,0.10)] py-[5px] pl-2 pr-3.5 font-mono text-[11.5px] font-medium tracking-[0.04em] text-[#93C5FD]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#3B82F6] shadow-[0_0_6px_#3B82F6,0_0_12px_rgba(59,130,246,0.4)]" />
+          SAP ACTIVATE
+        </div>
+
+        <h1 className="mb-1 text-[28px] font-bold leading-tight tracking-[-1.2px] text-[#F4F4F5]">
           KYNOVIA PROJECT MANAGEMENT
         </h1>
-        <p className="text-sm mb-1" style={{ color: '#6b7280' }}>
+        <p className="mb-1 text-sm text-[#60A5FA]">
           SAP Activate Methodology
         </p>
-        <p className="text-xs mb-6" style={{ color: '#9ca3af' }}>
+        <p className="mb-6 text-[13.5px] leading-relaxed text-[#A1A1AA]">
           Acesse com sua conta para continuar
         </p>
         {!isSupabaseConfigured && (
-          <div className="mb-4 px-4 py-3 rounded-lg text-xs" style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa', lineHeight: 1.5 }}>
+          <div className="mb-4 rounded-[10px] border border-[rgba(245,158,11,0.2)] bg-[rgba(245,158,11,0.1)] px-4 py-3 text-xs leading-relaxed text-[#FCD34D]">
             Supabase ainda não configurado neste ambiente. Login real, cadastro e reset ficam bloqueados; o modo demo continua disponível.
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex border-b mb-6" style={{ borderColor: '#e5e7eb' }}>
+        <div className="mb-6 grid grid-cols-3 gap-1 rounded-[10px] border border-[rgba(255,255,255,0.06)] bg-[#0A0A0B] p-1">
           {(['login', 'register', 'reset'] as Tab[]).map((t) => (
             <button
               key={t}
-              className="flex-1 py-3 text-sm font-medium transition-colors"
-              style={{
-                borderBottom: tab === t ? '2px solid #3B4FE8' : '2px solid transparent',
-                color:        tab === t ? '#3B4FE8' : '#9ca3af',
-                fontWeight:   tab === t ? 700 : 500,
-              }}
+              className={`rounded-[8px] px-2 py-2.5 text-xs font-semibold transition ${tab === t ? 'bg-[#2563EB] text-white shadow-[0_0_0_4px_rgba(37,99,235,0.12)]' : 'text-[#A1A1AA] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#F4F4F5]'}`}
               onClick={() => { setTab(t); setError(null); setSuccess(null) }}
             >
               {tabLabel[t]}
@@ -236,12 +247,12 @@ export default function AuthPage() {
 
         {/* Error / success */}
         {error && (
-          <div className="mb-4 px-4 py-3 rounded-lg text-sm" style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>
+          <div className="mb-4 rounded-[10px] border border-[rgba(248,113,113,0.28)] bg-[rgba(127,29,29,0.35)] px-4 py-3 text-sm text-[#FCA5A5]">
             {error}
           </div>
         )}
         {success && (
-          <div className="mb-4 px-4 py-3 rounded-lg text-sm" style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
+          <div className="mb-4 rounded-[10px] border border-[rgba(16,185,129,0.2)] bg-[rgba(16,185,129,0.12)] px-4 py-3 text-sm text-[#6EE7B7]">
             {success}
           </div>
         )}
@@ -250,68 +261,63 @@ export default function AuthPage() {
         {tab === 'login' && (
           <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
             <div>
-              <label className="label" style={{ color: '#475569' }}>E-mail</label>
+              <label className="mb-1 block font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-[#52525B]">E-mail</label>
               <input
                 {...loginForm.register('email')}
                 type="email"
                 placeholder="voce@empresa.com"
-                className="w-full px-3.5 py-2.5 rounded-[8px] text-sm outline-none transition"
-                style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#1e293b' }}
+                className="w-full rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[#0A0A0B] px-3.5 py-2.5 text-sm text-[#F4F4F5] outline-none transition placeholder:text-[#52525B] focus:border-[#2563EB]"
               />
               {loginForm.formState.errors.email && (
-                <p className="text-xs mt-1" style={{ color: '#ef4444' }}>
+                <p className="mt-1 text-xs text-[#FCA5A5]">
                   {loginForm.formState.errors.email.message}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="label" style={{ color: '#475569' }}>Senha</label>
+              <label className="mb-1 block font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-[#52525B]">Senha</label>
               <input
                 {...loginForm.register('password')}
                 type="password"
                 placeholder="••••••"
-                className="w-full px-3.5 py-2.5 rounded-[8px] text-sm outline-none transition"
-                style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#1e293b' }}
+                className="w-full rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[#0A0A0B] px-3.5 py-2.5 text-sm text-[#F4F4F5] outline-none transition placeholder:text-[#52525B] focus:border-[#2563EB]"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-[8px] font-bold text-sm text-white transition"
-              style={{ background: '#3B4FE8', opacity: loading ? 0.7 : 1 }}
+              className="w-full rounded-[8px] bg-[#2563EB] py-3 text-sm font-semibold text-white transition hover:-translate-y-px hover:bg-[#1D4ED8] hover:shadow-[0_0_0_4px_rgba(37,99,235,0.18),0_8px_24px_rgba(37,99,235,0.28)] disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
             >
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
 
             <button
               type="button"
-              className="w-full py-3 rounded-[8px] font-bold text-sm transition"
-              style={{ background: '#F59E0B', color: '#1a1f3a' }}
+              className="w-full rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-transparent py-3 text-sm font-semibold text-[#A1A1AA] transition hover:border-[rgba(255,255,255,0.13)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#F4F4F5]"
               onClick={handleDemoLogin}
             >
               Entrar em modo demo
             </button>
 
-            <div className="rounded-lg px-4 py-3 text-xs" style={{ background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0', lineHeight: 1.6 }}>
+            <div className="rounded-[10px] border border-[rgba(59,130,246,0.18)] bg-[rgba(37,99,235,0.09)] px-4 py-3 font-mono text-[11px] leading-relaxed text-[#93C5FD]">
               Demo local: <strong>demo@sap.local</strong> / <strong>demo1234</strong>
             </div>
 
             <div className="text-center">
               <button
                 type="button"
-                className="text-sm font-medium hover:underline"
-                style={{ color: '#F59E0B' }}
+                className="text-sm font-medium text-[#60A5FA] hover:underline"
                 onClick={() => setTab('reset')}
               >
                 Esqueci minha senha
               </button>
             </div>
 
-            <p className="text-center text-xs mt-4" style={{ color: '#9ca3af', lineHeight: 1.6 }}>
-              Novos cadastros entram como <strong style={{ color: '#3B4FE8' }}>Usuário</strong>.<br />
-              Apenas o <strong style={{ color: '#F59E0B' }}>ADM</strong> pode promover perfis e apagar dados.
+            <p className="mt-4 text-center text-xs leading-relaxed text-[#52525B]">
+              Novos cadastros entram como <strong className="text-[#60A5FA]">Usuário</strong>.<br />
+              Apenas o <strong className="text-[#FCD34D]">ADM</strong> pode promover perfis e apagar dados.
             </p>
           </form>
         )}
@@ -321,7 +327,7 @@ export default function AuthPage() {
           <form onSubmit={registerForm.handleSubmit(handleRegister)} className="space-y-4">
             {(['full_name', 'email', 'password', 'confirm_password'] as const).map((field) => (
               <div key={field}>
-                <label className="label" style={{ color: '#475569' }}>
+                <label className="mb-1 block font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-[#52525B]">
                   {field === 'full_name'        ? 'Nome completo' :
                    field === 'email'             ? 'E-mail' :
                    field === 'password'          ? 'Senha (mínimo 8 caracteres)' :
@@ -331,11 +337,10 @@ export default function AuthPage() {
                   {...registerForm.register(field)}
                   type={field.includes('password') ? 'password' : field === 'email' ? 'email' : 'text'}
                   placeholder={field.includes('password') ? '••••••••' : field === 'email' ? 'voce@empresa.com' : 'Seu nome completo'}
-                  className="w-full px-3.5 py-2.5 rounded-[8px] text-sm outline-none"
-                  style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#1e293b' }}
+                  className="w-full rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[#0A0A0B] px-3.5 py-2.5 text-sm text-[#F4F4F5] outline-none transition placeholder:text-[#52525B] focus:border-[#2563EB]"
                 />
                 {registerForm.formState.errors[field] && (
-                  <p className="text-xs mt-1" style={{ color: '#ef4444' }}>
+                  <p className="mt-1 text-xs text-[#FCA5A5]">
                     {registerForm.formState.errors[field]?.message}
                   </p>
                 )}
@@ -345,8 +350,7 @@ export default function AuthPage() {
             <button
               type="submit"
               disabled={regLoading}
-              className="w-full py-3 rounded-[8px] font-bold text-sm text-white"
-              style={{ background: '#3B4FE8', opacity: regLoading ? 0.7 : 1 }}
+              className="w-full rounded-[8px] bg-[#2563EB] py-3 text-sm font-semibold text-white transition hover:-translate-y-px hover:bg-[#1D4ED8] hover:shadow-[0_0_0_4px_rgba(37,99,235,0.18),0_8px_24px_rgba(37,99,235,0.28)] disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
             >
               {regLoading ? 'Criando conta...' : 'Criar conta e entrar'}
             </button>
@@ -356,13 +360,13 @@ export default function AuthPage() {
         {/* ── RESET TAB ── */}
         {tab === 'reset' && (
           <form onSubmit={resetForm.handleSubmit(handleReset)} className="space-y-4">
-            <p className="text-xs mb-2" style={{ color: '#9ca3af', lineHeight: 1.6 }}>
+            <p className="mb-2 text-xs leading-relaxed text-[#A1A1AA]">
               Permitido para o ADM raiz ou quando ainda não há senha definida no sistema.
             </p>
 
             {(['email', 'password', 'confirm_password'] as const).map((field) => (
               <div key={field}>
-                <label className="label" style={{ color: '#475569' }}>
+                <label className="mb-1 block font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-[#52525B]">
                   {field === 'email'             ? 'E-mail' :
                    field === 'password'          ? 'Nova senha (mínimo 8 caracteres)' :
                    'Confirmar nova senha'}
@@ -371,11 +375,10 @@ export default function AuthPage() {
                   {...resetForm.register(field)}
                   type={field.includes('password') ? 'password' : 'email'}
                   placeholder={field.includes('password') ? '••••••••' : 'voce@empresa.com'}
-                  className="w-full px-3.5 py-2.5 rounded-[8px] text-sm outline-none"
-                  style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#1e293b' }}
+                  className="w-full rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[#0A0A0B] px-3.5 py-2.5 text-sm text-[#F4F4F5] outline-none transition placeholder:text-[#52525B] focus:border-[#2563EB]"
                 />
                 {resetForm.formState.errors[field] && (
-                  <p className="text-xs mt-1" style={{ color: '#ef4444' }}>
+                  <p className="mt-1 text-xs text-[#FCA5A5]">
                     {resetForm.formState.errors[field]?.message}
                   </p>
                 )}
@@ -385,8 +388,7 @@ export default function AuthPage() {
             <button
               type="submit"
               disabled={resetLoading}
-              className="w-full py-3 rounded-[8px] font-bold text-sm text-white"
-              style={{ background: '#3B4FE8', opacity: resetLoading ? 0.7 : 1 }}
+              className="w-full rounded-[8px] bg-[#2563EB] py-3 text-sm font-semibold text-white transition hover:-translate-y-px hover:bg-[#1D4ED8] hover:shadow-[0_0_0_4px_rgba(37,99,235,0.18),0_8px_24px_rgba(37,99,235,0.28)] disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
             >
               {resetLoading ? 'Redefinindo...' : 'Redefinir e entrar'}
             </button>
