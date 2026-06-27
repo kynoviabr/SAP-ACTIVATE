@@ -158,10 +158,81 @@ export function snapshotToCurvePoint(snapshot: MacroScheduleSnapshot) {
   }
 }
 
+export function buildAuditScheduleCurve(
+  baselineTasks: MacroScheduleBaselineTask[],
+  snapshots: MacroScheduleSnapshot[],
+  holidays: string[] = []
+) {
+  const orderedTasks = sortMacroTasks(baselineTasks).filter((task) => task.title)
+  const orderedSnapshots = snapshots.slice().sort((a, b) => a.status_date.localeCompare(b.status_date))
+  if (!orderedTasks.length) return orderedSnapshots.map(snapshotToCurvePoint)
+
+  const totalWeight = orderedTasks.reduce((sum, task) => sum + scheduleTaskWeight(task, holidays), 0) || 1
+  const range = baselineRange(orderedTasks)
+  const dateSet = new Set<string>([range.start, range.end])
+  const totalDays = Math.max(1, daysBetween(range.start, range.end))
+  const step = Math.max(1, Math.ceil(totalDays / 44))
+  const cursor = new Date(`${range.start}T12:00:00`)
+  const finish = new Date(`${range.end}T12:00:00`)
+
+  while (cursor <= finish) {
+    dateSet.add(toIso(cursor))
+    cursor.setDate(cursor.getDate() + step)
+  }
+  orderedSnapshots.forEach((snapshot) => dateSet.add(snapshot.status_date))
+
+  const dates = Array.from(dateSet).sort()
+  return dates.map((date) => {
+    const pv = round1(orderedTasks.reduce((sum, task) => sum + scheduleTaskWeight(task, holidays) * plannedPctAtCutoff(task, date, holidays) / 100, 0))
+    const currentSnapshot = latestSnapshotAt(orderedSnapshots, date)
+    const isStart = date === range.start
+    const realized = currentSnapshot ? currentSnapshot.real_pct : isStart ? 0 : null
+    const ev = currentSnapshot ? currentSnapshot.ev : isStart ? 0 : null
+    return {
+      date,
+      label: new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      planned: round1(pv / totalWeight * 100),
+      realized: realized === null ? null : round1(realized),
+      pv,
+      ev,
+      spi: currentSnapshot?.spi ?? null,
+      baseline: 1,
+    }
+  })
+}
+
 function plannedPctAtCutoff(task: MacroScheduleBaselineTask, statusDate: string, holidays: string[]) {
   const explicit = effectivePlannedPct(task, statusDate, holidays)
   if (task.planned_pct > 0) return explicit
   return derivePlannedPctByDate(task, statusDate, holidays)
+}
+
+function baselineRange(tasks: MacroScheduleBaselineTask[]) {
+  const dates = tasks.flatMap((task) => [task.start_date, task.end_date]).filter(Boolean) as string[]
+  const sorted = dates.sort()
+  const fallback = todayIso()
+  return {
+    start: sorted[0] ?? fallback,
+    end: sorted[sorted.length - 1] ?? fallback,
+  }
+}
+
+function latestSnapshotAt(snapshots: MacroScheduleSnapshot[], date: string): MacroScheduleSnapshot | null {
+  let latest: MacroScheduleSnapshot | null = null
+  for (const snapshot of snapshots) {
+    if (snapshot.status_date <= date) latest = snapshot
+  }
+  return latest
+}
+
+function daysBetween(start: string, end: string) {
+  return Math.round((new Date(`${end}T12:00:00`).getTime() - new Date(`${start}T12:00:00`).getTime()) / 86_400_000)
+}
+
+function toIso(date: Date) {
+  const local = new Date(date)
+  local.setMinutes(local.getMinutes() - local.getTimezoneOffset())
+  return local.toISOString().slice(0, 10)
 }
 
 function round1(value: number) {

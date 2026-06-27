@@ -19,6 +19,7 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,7 +30,7 @@ import { useMacroSchedule } from '@/hooks/useMacroSchedule'
 import { useScheduleGovernance } from '@/hooks/useScheduleGovernance'
 import { MACRO_PHASE_COLORS } from '@/lib/macroSchedule'
 import { buildScheduleAnalytics, criticalReason, type CheckpointSummary } from '@/lib/scheduleAnalytics'
-import { snapshotToCurvePoint } from '@/lib/scheduleGovernance'
+import { buildAuditScheduleCurve, snapshotToCurvePoint } from '@/lib/scheduleGovernance'
 import { formatDate } from '@/lib/utils'
 
 type KpiTone = 'blue' | 'green' | 'amber' | 'red'
@@ -39,14 +40,15 @@ export default function ScheduleReportsPage() {
   const navigate = useNavigate()
   const projectQuery = useProject(projectId)
   const { tasks, holidayDates, isLoading, forceSync, lastSyncedAt } = useMacroSchedule(projectId)
-  const { activeBaseline, snapshots, isLoading: governanceLoading } = useScheduleGovernance(projectId)
+  const { activeBaseline, baselineTasks, snapshots, isLoading: governanceLoading } = useScheduleGovernance(projectId)
 
   const report = useMemo(() => buildScheduleAnalytics(tasks, holidayDates), [holidayDates, tasks])
-  const auditCurve = useMemo(() => snapshots.map(snapshotToCurvePoint), [snapshots])
-  const hasAuditSnapshots = auditCurve.length > 0
+  const auditCurve = useMemo(() => buildAuditScheduleCurve(baselineTasks, snapshots, holidayDates), [baselineTasks, holidayDates, snapshots])
+  const auditSpiCurve = useMemo(() => snapshots.map(snapshotToCurvePoint), [snapshots])
+  const hasAuditSnapshots = snapshots.length > 0
   const latestSnapshot = snapshots[snapshots.length - 1]
   const curveData = hasAuditSnapshots ? auditCurve : report.curve
-  const spiData = hasAuditSnapshots ? auditCurve : report.spiCurve
+  const spiData = hasAuditSnapshots ? auditSpiCurve : report.spiCurve
   const display = {
     asOfIso: latestSnapshot?.status_date ?? report.asOfIso,
     pv: latestSnapshot?.pv ?? report.pv,
@@ -140,20 +142,14 @@ export default function ScheduleReportsPage() {
         <Kpi title="Forecast" value={display.forecastLabel} detail={display.forecastDetail} icon={<CalendarClock className="h-5 w-5" />} tone={display.forecastTone} info="Projeção simples da data final baseada no SPI atual. Para auditoria, use como tendência gerencial, não como dado histórico." />
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
-        <ChartCard title="Planejado x realizado" badge="Linha do tempo">
-          <ResponsiveContainer width="100%" height={330}>
-            <ComposedChart data={curveData} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke="#2e3460" strokeDasharray="3 3" />
-              <XAxis dataKey="label" stroke="#9ca3af" tick={{ fontSize: 11 }} />
-              <YAxis stroke="#9ca3af" tick={{ fontSize: 11 }} domain={[0, 100]} />
-              <Tooltip contentStyle={{ background: '#1a1f3a', border: '1px solid #2e3460', borderRadius: 8 }} />
-              <Area type="monotone" dataKey="planned" name="Planejado %" fill="#3B4FE8" fillOpacity={0.16} stroke="#3B4FE8" strokeWidth={2} />
-              <Line type="monotone" dataKey="realized" name="Realizado %" stroke="#10b981" strokeWidth={3} dot={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </ChartCard>
+      <ScheduleCurveCard
+        data={curveData}
+        cutoffDate={latestSnapshot?.status_date ?? report.asOfIso}
+        cutoffLabel={latestSnapshot ? formatShortDate(latestSnapshot.status_date) : formatShortDate(report.asOfIso)}
+        scopeLabel={hasAuditSnapshots ? 'baseline + cortes salvos' : 'visão operacional atual'}
+      />
 
+      <section className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr]">
         <ChartCard title={hasAuditSnapshots ? 'SPI por corte salvo' : 'SPI operacional'} badge={display.spiText}>
           <ResponsiveContainer width="100%" height={330}>
             <AreaChart data={spiData} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
@@ -166,9 +162,7 @@ export default function ScheduleReportsPage() {
             </AreaChart>
           </ResponsiveContainer>
         </ChartCard>
-      </section>
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr]">
         <ChartCard title="EVM em horas ponderadas" badge="PV / EV">
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={display.evmBars} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
@@ -180,7 +174,9 @@ export default function ScheduleReportsPage() {
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
+      </section>
 
+      <section className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr]">
         <section className="card">
           <div className="mb-4 flex items-center justify-between">
             <div>
@@ -329,6 +325,91 @@ function checkpointLabel(status: CheckpointSummary['status']) {
   return 'Futuro'
 }
 
+function ScheduleCurveCard({
+  data,
+  cutoffDate,
+  cutoffLabel,
+  scopeLabel,
+}: {
+  data: Array<{ date: string; planned: number; realized: number | null; pv: number; ev: number | null; spi: number | null }>
+  cutoffDate: string
+  cutoffLabel: string
+  scopeLabel: string
+}) {
+  return (
+    <section className="card overflow-hidden p-0">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border px-5 py-4">
+        <div>
+          <h2 className="text-lg font-bold text-text-primary">Curva-S - Cronograma</h2>
+          <p className="mt-1 text-xs text-text-muted">Cumulativa planejado x realizado. O realizado futuro fica congelado no último corte salvo.</p>
+        </div>
+        <span className="text-xs font-bold text-text-muted">{scopeLabel}</span>
+      </div>
+      <div className="px-5 pt-4">
+        <div className="mb-2 flex flex-wrap items-center gap-6 text-sm font-semibold text-text-secondary">
+          <span className="inline-flex items-center gap-2"><i className="h-[3px] w-8 rounded-full bg-[#2563eb]" />Planejado</span>
+          <span className="inline-flex items-center gap-2"><i className="h-[3px] w-8 rounded-full bg-[#22c55e]" />Realizado</span>
+          <span className="inline-flex items-center gap-2"><i className="h-6 border-l-2 border-dashed border-danger" />{cutoffLabel}</span>
+        </div>
+        <ResponsiveContainer width="100%" height={380}>
+          <ComposedChart data={data} margin={{ top: 14, right: 20, bottom: 10, left: 4 }}>
+            <CartesianGrid stroke="#252b4d" strokeDasharray="4 5" vertical={false} />
+            <XAxis
+              dataKey="date"
+              stroke="#9ca3af"
+              tick={{ fontSize: 12, fontWeight: 700 }}
+              tickFormatter={formatAxisDate}
+              minTickGap={56}
+            />
+            <YAxis
+              stroke="#9ca3af"
+              tick={{ fontSize: 12, fontWeight: 700 }}
+              tickFormatter={(value) => `${value}%`}
+              domain={[0, 100]}
+            />
+            <Tooltip
+              labelFormatter={(value) => formatDate(String(value))}
+              formatter={(value, name) => {
+                const label = name === 'planned' ? 'Planejado' : name === 'realized' ? 'Realizado' : String(name)
+                return [value === null ? '-' : `${Number(value).toFixed(1)}%`, label]
+              }}
+              contentStyle={{ background: '#1a1f3a', border: '1px solid #2e3460', borderRadius: 8 }}
+            />
+            <Area
+              type="monotone"
+              dataKey="planned"
+              name="Planejado"
+              fill="#2563eb"
+              fillOpacity={0.16}
+              stroke="#2563eb"
+              strokeWidth={3}
+              strokeDasharray="8 6"
+              dot={false}
+            />
+            <Area
+              type="monotone"
+              dataKey="realized"
+              name="Realizado"
+              connectNulls
+              fill="#22c55e"
+              fillOpacity={0.14}
+              stroke="#22c55e"
+              strokeWidth={3}
+              dot={false}
+            />
+            <ReferenceLine
+              x={cutoffDate}
+              stroke="#ef4444"
+              strokeDasharray="5 5"
+              label={{ value: cutoffLabel, position: 'top', fill: '#d1d5db', fontSize: 12, fontWeight: 700 }}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </section>
+  )
+}
+
 function Kpi({
   title,
   value,
@@ -375,6 +456,16 @@ function Kpi({
       ) : null}
     </article>
   )
+}
+
+function formatAxisDate(value: string) {
+  const date = new Date(`${value}T12:00:00`)
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')
+}
+
+function formatShortDate(value: string) {
+  const date = new Date(`${value}T12:00:00`)
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')
 }
 
 function ChartCard({ title, badge, children }: { title: string; badge: string; children: ReactNode }) {
