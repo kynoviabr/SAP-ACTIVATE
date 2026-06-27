@@ -130,8 +130,8 @@ O JWT do Supabase é customizado via `auth.users` + tabela `user_profiles` para 
 ```sql
 CREATE TABLE tenants (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  slug            TEXT UNIQUE NOT NULL,           -- ex: "cast", "pwc-brasil"
-  name            TEXT NOT NULL,                  -- ex: "CAST Consulting"
+  slug            TEXT UNIQUE NOT NULL,           -- ex: "cliente-atlas", "cliente-aurora"
+  name            TEXT NOT NULL,                  -- ex: "Cliente Atlas Consultoria"
   logo_url        TEXT,
   favicon_url     TEXT,
   primary_color   TEXT DEFAULT '#3B5BDB',         -- hex
@@ -1535,7 +1535,7 @@ Link ativo: bg #1a1f3a + text white
 ```
 border-top: #2e3460
 Left:  badge "⚙️ GESTÃO SISTÊMICA" + "SAP Activate Portal v2.0"
-Right: "© 2026 Cast4IT Partner" + dot verde + "Realtime ativo"
+Right: "© 2026 Parceiro Kynovia" + dot verde + "Realtime ativo"
 ```
 
 ### max-width por página

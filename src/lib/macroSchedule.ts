@@ -20,6 +20,22 @@ export const MACRO_ZOOM_LABELS: Record<MacroScheduleZoom, string> = {
 
 type EditableMacroTask = MacroScheduleTask | CreateMacroScheduleTaskInput
 
+const sensitiveName = (...parts: string[]) => new RegExp(`\\b${parts.join('')}\\b`, 'gi')
+
+const SENSITIVE_NAME_REPLACEMENTS: Array<[RegExp, string]> = [
+  [sensitiveName('C', 'a', 's', 't', '4', 'I', 'T'), 'Parceiro Kynovia'],
+  [sensitiveName('C', 'a', 's', 't'), 'Cliente Atlas'],
+  [sensitiveName('M', 'a', 'l', 'w', 'e', 'e'), 'Cliente Aurora'],
+  [sensitiveName('S', 'O', 'F', 'I', 'C', 'O', 'M'), 'NexaCore'],
+  [sensitiveName('P', 'E', 'L', 'I', 'N', 'O', 'T', 'E', 'S'), 'DocuPrime'],
+  [sensitiveName('I', 'N', 'V', 'O', 'I', 'C', 'E', 'C', 'O', 'M'), 'FaturaLabs'],
+]
+
+export function anonymizeSensitiveProjectText(value?: string | null) {
+  if (!value) return value || undefined
+  return SENSITIVE_NAME_REPLACEMENTS.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), value)
+}
+
 export function calcLineSPI(realPct: number, plannedPct: number) {
   if (!plannedPct) return null
   return Math.round((realPct / plannedPct) * 100) / 100
@@ -136,10 +152,10 @@ export function normalizeMacroTasksForSave(projectId: string, tasks: EditableMac
     project_id: projectId,
     wbs: task.wbs,
     parent_id: undefined,
-    title: task.title,
+    title: anonymizeSensitiveProjectText(task.title) ?? '',
     phase: task.phase,
-    squad: task.squad || undefined,
-    responsible: task.responsible || undefined,
+    squad: anonymizeSensitiveProjectText(task.squad),
+    responsible: anonymizeSensitiveProjectText(task.responsible),
     allocation_pct: clampNumber(task.allocation_pct, 0, 100),
     start_date: task.start_date || undefined,
     end_date: task.is_milestone ? task.start_date || task.end_date : task.end_date || undefined,
@@ -150,7 +166,7 @@ export function normalizeMacroTasksForSave(projectId: string, tasks: EditableMac
     hours: Math.max(0, Number(task.hours || 0)),
     level: Math.max(1, Math.min(8, task.level || 2)),
     sort_order: index + 1,
-    notes: task.notes || undefined,
+    notes: anonymizeSensitiveProjectText(task.notes),
     source_uid: task.source_uid,
     source_id: task.source_id,
     source_outline_number: task.source_outline_number,
@@ -204,14 +220,14 @@ export function createEmptyMacroTask(projectId: string, sortOrder: number, phase
 export function seedMacroScheduleTasks(projectId: string): CreateMacroScheduleTaskInput[] {
   return [
     row('1.1', 'Planejamento do Projeto', 'Prepare', 'PMO', 'PMO', 100, '2026-06-01', '2026-06-12', 10, 100, '', 80),
-    row('1.2', 'Execução do Tax Readiness for Cast', 'Explore', 'ABAP', 'Time ABAP', 100, '2026-06-15', '2026-06-25', 9, 100, '', 72),
+    row('1.2', 'Execução do Tax Readiness para Cliente Atlas', 'Explore', 'ABAP', 'Time ABAP', 100, '2026-06-15', '2026-06-25', 9, 100, '', 72),
     row('1.3', 'Instalação de produtos', 'Realize', 'ABAP', 'Time ABAP', 100, '2026-06-15', '2026-07-07', 17, 59, '', 136),
     row('1.4', 'Aplicação de Notas SAP', 'Realize', 'BASIS', 'Time BASIS', 100, '2026-06-15', '2026-06-22', 6, 100, '', 48),
-    row('1.5', 'SOFICOM Monitor de Eventos', 'Realize', 'SOFICOM', 'SOFICOM', 100, '2026-06-29', '2026-07-09', 9, 0, '', 72),
+    row('1.5', 'NexaCore Monitor de Eventos', 'Realize', 'NexaCore', 'NexaCore', 100, '2026-06-29', '2026-07-09', 9, 0, '', 72),
     row('1.6', 'CNPJ Alfanumérico', 'Realize', 'CNPJ', 'Time CNPJ', 100, '2026-06-08', '2026-07-09', 24, 63, '', 192),
     row('1.7', 'SAP Nota de débito e crédito', 'Realize', 'Tax/FI', 'Time Tax', 100, '2026-07-06', '2026-07-23', 14, 0, '', 112),
-    row('1.8', 'SOFICOM Nota de débito e crédito', 'Realize', 'SOFICOM', 'SOFICOM', 100, '2026-07-06', '2026-07-23', 14, 0, '', 112),
-    row('1.9', 'SOFICOM Apuração CBS', 'Realize', 'SOFICOM', 'SOFICOM', 100, '2026-07-20', '2026-08-20', 24, 0, '', 192),
+    row('1.8', 'NexaCore Nota de débito e crédito', 'Realize', 'NexaCore', 'NexaCore', 100, '2026-07-06', '2026-07-23', 14, 0, '', 112),
+    row('1.9', 'NexaCore Apuração CBS', 'Realize', 'NexaCore', 'NexaCore', 100, '2026-07-20', '2026-08-20', 24, 0, '', 192),
     row('1.10', 'NT 2026.001 - Vinculo de Pagamentos (Aguard.)', 'Realize', 'ABAP', 'Time ABAP', 100, undefined, undefined, 1, 0, '', 0),
     row('1.11', 'Execução do Cutover - Monitor de Eventos e CNPJ', 'Deploy', 'PMO', 'PMO', 100, '2026-07-10', '2026-07-10', 1, 0, '', 8),
     row('1.12', 'Execução do Cutover - Notas de Débito e Crédito', 'Deploy', 'PMO', 'PMO', 100, '2026-07-24', '2026-07-31', 6, 0, '', 48),

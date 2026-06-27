@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { macroScheduleDB } from '@/lib/database'
 import {
+  anonymizeSensitiveProjectText,
   getBrazilNationalHolidays,
   getHolidaysForTaskRange,
   normalizeMacroTasksForSave,
@@ -56,9 +57,19 @@ function writeLocalItems<T>(key: string, items: T[]) {
   }
 }
 
+function anonymizeDemoTask(task: MacroScheduleTask): MacroScheduleTask {
+  return {
+    ...task,
+    title: anonymizeSensitiveProjectText(task.title) ?? task.title,
+    squad: anonymizeSensitiveProjectText(task.squad),
+    responsible: anonymizeSensitiveProjectText(task.responsible),
+    notes: anonymizeSensitiveProjectText(task.notes),
+  }
+}
+
 function loadDemoTasks(projectId: string) {
   const stored = readLocalItems<MacroScheduleTask>(demoTasksKey(projectId))
-  return stored?.length ? stored : seedMacroScheduleTasks(projectId).map(hydrateDemoTask)
+  return stored?.length ? stored.map(anonymizeDemoTask) : seedMacroScheduleTasks(projectId).map(hydrateDemoTask)
 }
 
 function loadDemoHolidays(projectId: string) {
