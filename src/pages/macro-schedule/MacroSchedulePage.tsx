@@ -80,17 +80,19 @@ export default function MacroSchedulePage() {
   const [lang, setLang] = useState<Lang>('pt')
   const [message, setMessage] = useState('')
   const [dirty, setDirty] = useState(false)
+  const [preserveWbs, setPreserveWbs] = useState(false)
 
   useEffect(() => {
     if (dirty) return
     setRows(sortMacroTasks(tasks) as MacroRow[])
+    setPreserveWbs(tasks.some((task) => Boolean(task.source_uid || task.source_outline_number)))
   }, [dirty, tasks])
 
   useEffect(() => {
     if (!dirty) return
     window.clearTimeout(autosaveRef.current)
     autosaveRef.current = window.setTimeout(() => {
-      replaceTasks(rows)
+      replaceTasks(rows, { preserveWbs })
         .then(() => {
           setDirty(false)
           setMessage('Cronograma sincronizado.')
@@ -98,9 +100,12 @@ export default function MacroSchedulePage() {
         .catch((error) => setMessage(`Falha ao salvar: ${(error as Error).message}`))
     }, 900)
     return () => window.clearTimeout(autosaveRef.current)
-  }, [dirty, replaceTasks, rows])
+  }, [dirty, preserveWbs, replaceTasks, rows])
 
-  const normalizedRows = useMemo(() => recalcParentAggregates(renumberWbs(rows)), [rows])
+  const normalizedRows = useMemo(
+    () => preserveWbs ? recalcParentAggregates(sortMacroTasks(rows)) : recalcParentAggregates(renumberWbs(rows)),
+    [preserveWbs, rows]
+  )
   const scheduleStats = useMemo(() => ({
     total: normalizedRows.length,
     milestones: normalizedRows.filter((row) => row.is_milestone).length,
@@ -109,7 +114,10 @@ export default function MacroSchedulePage() {
   }), [normalizedRows])
 
   function applyRows(updater: (current: MacroRow[]) => MacroRow[], save = true) {
-    setRows((current) => recalcParentAggregates(renumberWbs(updater(current))) as MacroRow[])
+    setRows((current) => {
+      const next = updater(current)
+      return (preserveWbs ? recalcParentAggregates(sortMacroTasks(next)) : recalcParentAggregates(renumberWbs(next))) as MacroRow[]
+    })
     if (save) setDirty(true)
   }
 
@@ -200,6 +208,7 @@ export default function MacroSchedulePage() {
   async function applyTemplate() {
     if (!window.confirm('Aplicar template substitui o cronograma atual. Continuar?')) return
     const seeded = seedMacroScheduleTasks(projectId).map(withLocalId)
+    setPreserveWbs(false)
     setRows(seeded)
     setDirty(false)
     await replaceWithTemplate()
@@ -234,6 +243,7 @@ export default function MacroSchedulePage() {
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
       const imported = data.map((row, index) => excelRowToTask(row, index, projectId, XLSX)).map(withLocalId)
+      setPreserveWbs(false)
       setRows(imported)
       setDirty(false)
       await replaceTasks(imported)
@@ -254,10 +264,11 @@ export default function MacroSchedulePage() {
     if (!window.confirm('A carga substituirá o cronograma atual. Continuar?')) return
     try {
       const imported = parseProjectXml(await file.text(), projectId).map(withLocalId)
+      setPreserveWbs(true)
       setRows(imported)
       setDirty(false)
-      await replaceTasks(imported)
-      setMessage(`Importadas ${imported.length} tarefa(s) do MS Project XML.`)
+      await replaceTasks(imported, { preserveWbs: true })
+      setMessage(`Importadas ${imported.length} tarefa(s) do MS Project XML com estrutura WBS preservada.`)
     } catch (error) {
       setMessage(`Falha na importação XML: ${(error as Error).message}`)
     }
@@ -673,24 +684,41 @@ function excelRowToTask(row: Record<string, unknown>, index: number, projectId: 
 }
 
 function buildProjectXml(rows: MacroRow[]) {
-  const tasks = normalizeMacroTasksForSave('project', rows)
+  const tasks = normalizeMacroTasksForSave('project', rows, { preserveWbs: true })
+  const uidByLine = new Map(tasks.map((task, index) => [index + 1, task.source_uid ?? index + 1]))
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Project xmlns="http://schemas.microsoft.com/project">
   <Name>Cronograma Macro</Name>
   <ScheduleFromStart>1</ScheduleFromStart>
   <Tasks>
 ${tasks.map((task, index) => `    <Task>
-      <UID>${index + 1}</UID>
-      <ID>${index + 1}</ID>
+      <UID>${task.source_uid ?? index + 1}</UID>
+      <ID>${task.source_id ?? index + 1}</ID>
       <Name>${xmlEscape(task.title)}</Name>
       <WBS>${xmlEscape(task.wbs)}</WBS>
-      <OutlineNumber>${xmlEscape(task.wbs)}</OutlineNumber>
-      <OutlineLevel>${task.level}</OutlineLevel>
+      <OutlineNumber>${xmlEscape(task.source_outline_number ?? task.wbs)}</OutlineNumber>
+      <OutlineLevel>${task.source_outline_level ?? task.level}</OutlineLevel>
       <Start>${toProjectDate(task.start_date)}</Start>
       <Finish>${toProjectDate(task.end_date)}</Finish>
+      <Duration>${buildProjectDuration(task.hours, task.is_milestone)}</Duration>
+      <Work>${buildProjectDuration(task.hours, task.is_milestone)}</Work>
+      ${task.source_calendar_uid ? `<CalendarUID>${task.source_calendar_uid}</CalendarUID>` : ''}
       <Milestone>${task.is_milestone ? 1 : 0}</Milestone>
+      <Summary>${task.source_is_summary ? 1 : 0}</Summary>
+      <Critical>${task.source_is_critical ? 1 : 0}</Critical>
+      <Active>${task.source_is_active === false ? 0 : 1}</Active>
+      <Manual>${task.source_is_manual ? 1 : 0}</Manual>
+      ${task.source_constraint_type ? `<ConstraintType>${task.source_constraint_type}</ConstraintType>` : ''}
+      ${task.source_constraint_date ? `<ConstraintDate>${task.source_constraint_date}</ConstraintDate>` : ''}
       <PercentComplete>${task.real_pct}</PercentComplete>
       <Notes>${xmlEscape(task.notes ?? '')}</Notes>
+${task.predecessors.map((line) => uidByLine.get(line)).filter(Boolean).map((uid) => `      <PredecessorLink>
+        <PredecessorUID>${uid}</PredecessorUID>
+        <Type>1</Type>
+        <CrossProject>0</CrossProject>
+        <LinkLag>0</LinkLag>
+        <LagFormat>7</LagFormat>
+      </PredecessorLink>`).join('\n')}
     </Task>`).join('\n')}
   </Tasks>
 </Project>`
@@ -700,31 +728,130 @@ function parseProjectXml(text: string, projectId: string): CreateMacroScheduleTa
   const doc = new DOMParser().parseFromString(text, 'application/xml')
   const parseError = doc.querySelector('parsererror')
   if (parseError) throw new Error('XML inválido.')
-  return Array.from(doc.getElementsByTagNameNS('*', 'Task')).map((node, index) => {
-    const wbs = getXmlText(node, 'WBS') || getXmlText(node, 'OutlineNumber') || `1.${index + 1}`
-    const start = normalizeDate(getXmlText(node, 'Start'))
-    const end = normalizeDate(getXmlText(node, 'Finish')) || start
-    const milestone = getXmlText(node, 'Milestone') === '1' || start === end
+  const resources = collectProjectResources(doc)
+  const assignments = collectProjectAssignments(doc, resources)
+  const sourceRows = Array.from(doc.getElementsByTagNameNS('*', 'Task'))
+    .filter((node) => getDirectXmlText(node, 'Name') && getDirectXmlText(node, 'Name') !== '0')
+  const uidToLine = new Map(sourceRows.map((node, index) => [Number(getDirectXmlText(node, 'UID')), index + 1]))
+
+  return sourceRows.map((node, index) => {
+    const sourceUid = getXmlNumber(node, 'UID')
+    const sourceId = getXmlNumber(node, 'ID')
+    const outlineNumber = getDirectXmlText(node, 'OutlineNumber')
+    const wbs = getDirectXmlText(node, 'WBS') || outlineNumber || `1.${index + 1}`
+    const start = normalizeDate(getDirectXmlText(node, 'Start'))
+    const end = normalizeDate(getDirectXmlText(node, 'Finish')) || start
+    const milestone = getXmlBool(node, 'Milestone') || start === end
+    const assignment = sourceUid ? assignments.get(sourceUid) : undefined
+    const sourceRaw = readProjectTaskMetadata(node, assignment)
+    const hours = assignment?.workHours ?? parseProjectDurationToHours(getDirectXmlText(node, 'Work')) ?? parseProjectDurationToHours(getDirectXmlText(node, 'Duration')) ?? 0
+
     return {
       project_id: projectId,
       wbs,
-      title: getXmlText(node, 'Name') || `Tarefa ${index + 1}`,
+      title: getDirectXmlText(node, 'Name') || `Tarefa ${index + 1}`,
       phase: normalizeMacroPhase(wbs.split('.')[0]),
-      squad: '',
-      responsible: '',
-      allocation_pct: 100,
+      squad: assignment?.groups.join(', ') || '',
+      responsible: assignment?.names.join(', ') || '',
+      allocation_pct: assignment?.units ? clampNumber(Math.round(assignment.units * 100), 0, 100) : 100,
       start_date: start || undefined,
       end_date: end || undefined,
       is_milestone: milestone,
       planned_pct: 0,
-      real_pct: clampNumber(getXmlText(node, 'PercentComplete'), 0, 100),
-      predecessors: [],
-      hours: 0,
-      level: Math.max(1, Number(getXmlText(node, 'OutlineLevel')) || wbs.split('.').length),
+      real_pct: clampNumber(getDirectXmlText(node, 'PercentComplete'), 0, 100),
+      predecessors: collectPredecessors(node, uidToLine),
+      hours,
+      level: Math.max(1, getXmlNumber(node, 'OutlineLevel') || wbs.split('.').length),
       sort_order: index + 1,
-      notes: getXmlText(node, 'Notes'),
+      notes: getDirectXmlText(node, 'Notes'),
+      source_uid: sourceUid,
+      source_id: sourceId,
+      source_outline_number: outlineNumber || undefined,
+      source_outline_level: getXmlNumber(node, 'OutlineLevel') || undefined,
+      source_calendar_uid: getXmlNumber(node, 'CalendarUID') || undefined,
+      source_constraint_type: getXmlNumber(node, 'ConstraintType') || undefined,
+      source_constraint_date: getDirectXmlText(node, 'ConstraintDate') || undefined,
+      source_is_summary: getXmlBool(node, 'Summary'),
+      source_is_critical: getXmlBool(node, 'Critical'),
+      source_is_active: getDirectXmlText(node, 'Active') ? getXmlBool(node, 'Active') : undefined,
+      source_is_manual: getXmlBool(node, 'Manual'),
+      source_raw: sourceRaw,
     }
-  }).filter((task) => task.title && task.title !== '0')
+  })
+}
+
+type ProjectResource = {
+  name: string
+  group: string
+}
+
+type ProjectAssignmentSummary = {
+  names: string[]
+  groups: string[]
+  workHours: number
+  actualWorkHours: number
+  units: number
+}
+
+function collectProjectResources(doc: Document) {
+  const resources = new Map<number, ProjectResource>()
+  Array.from(doc.getElementsByTagNameNS('*', 'Resource')).forEach((node) => {
+    const uid = getXmlNumber(node, 'UID')
+    if (!uid) return
+    const name = getDirectXmlText(node, 'Name') || getDirectXmlText(node, 'Initials')
+    if (!name || name === '0') return
+    resources.set(uid, {
+      name,
+      group: getDirectXmlText(node, 'Group'),
+    })
+  })
+  return resources
+}
+
+function collectProjectAssignments(doc: Document, resources: Map<number, ProjectResource>) {
+  const assignments = new Map<number, ProjectAssignmentSummary>()
+  Array.from(doc.getElementsByTagNameNS('*', 'Assignment')).forEach((node) => {
+    const taskUid = getXmlNumber(node, 'TaskUID')
+    const resourceUid = getXmlNumber(node, 'ResourceUID')
+    if (!taskUid) return
+
+    const resource = resourceUid ? resources.get(resourceUid) : undefined
+    const current = assignments.get(taskUid) ?? { names: [], groups: [], workHours: 0, actualWorkHours: 0, units: 0 }
+    const workHours = parseProjectDurationToHours(getDirectXmlText(node, 'Work')) ?? 0
+    const actualWorkHours = parseProjectDurationToHours(getDirectXmlText(node, 'ActualWork')) ?? 0
+    const units = normalizeProjectUnits(getXmlNumber(node, 'Units'))
+
+    if (resource?.name && !current.names.includes(resource.name)) current.names.push(resource.name)
+    if (resource?.group && !current.groups.includes(resource.group)) current.groups.push(resource.group)
+    current.workHours += workHours
+    current.actualWorkHours += actualWorkHours
+    if (units) current.units = current.units ? Math.max(current.units, units) : units
+    assignments.set(taskUid, current)
+  })
+  return assignments
+}
+
+function collectPredecessors(node: Element, uidToLine: Map<number, number>) {
+  return directChildren(node, 'PredecessorLink')
+    .map((link) => uidToLine.get(getXmlNumber(link, 'PredecessorUID')))
+    .filter((line): line is number => typeof line === 'number' && Number.isInteger(line) && line > 0)
+}
+
+function readProjectTaskMetadata(node: Element, assignment?: ProjectAssignmentSummary) {
+  return {
+    duration: getDirectXmlText(node, 'Duration'),
+    work: getDirectXmlText(node, 'Work'),
+    remaining_duration: getDirectXmlText(node, 'RemainingDuration'),
+    priority: getXmlNumber(node, 'Priority') || undefined,
+    deadline: getDirectXmlText(node, 'Deadline') || undefined,
+    fixed_cost: getDirectXmlText(node, 'FixedCost') || undefined,
+    constraint_type: getXmlNumber(node, 'ConstraintType') || undefined,
+    constraint_date: getDirectXmlText(node, 'ConstraintDate') || undefined,
+    assignment_resource_names: assignment?.names ?? [],
+    assignment_resource_groups: assignment?.groups ?? [],
+    assignment_work_hours: assignment?.workHours ?? 0,
+    assignment_actual_work_hours: assignment?.actualWorkHours ?? 0,
+  }
 }
 
 function getBlock(rows: MacroRow[], index: number) {
@@ -815,8 +942,46 @@ function normalizeDate(value: unknown, xlsx?: typeof import('xlsx')) {
   return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10)
 }
 
-function getXmlText(node: Element, tagName: string) {
-  return node.getElementsByTagNameNS('*', tagName)[0]?.textContent?.trim() ?? ''
+function directChildren(node: Element, tagName: string) {
+  return Array.from(node.children).filter((child) => child.localName === tagName)
+}
+
+function getDirectXmlText(node: Element, tagName: string) {
+  return directChildren(node, tagName)[0]?.textContent?.trim() ?? ''
+}
+
+function getXmlNumber(node: Element, tagName: string) {
+  const parsed = Number(getDirectXmlText(node, tagName))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function getXmlBool(node: Element, tagName: string) {
+  const value = getDirectXmlText(node, tagName).toLowerCase()
+  return value === '1' || value === 'true'
+}
+
+function parseProjectDurationToHours(value: string) {
+  if (!value) return null
+  const match = value.match(/^P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i)
+  if (!match) return null
+  const days = Number(match[1] || 0)
+  const hours = Number(match[2] || 0)
+  const minutes = Number(match[3] || 0)
+  const seconds = Number(match[4] || 0)
+  return Math.round((days * 8 + hours + minutes / 60 + seconds / 3600) * 100) / 100
+}
+
+function buildProjectDuration(hours: number, milestone: boolean) {
+  if (milestone) return 'PT0H0M0S'
+  const safeHours = Math.max(0, Number(hours || 0))
+  const wholeHours = Math.floor(safeHours)
+  const minutes = Math.round((safeHours - wholeHours) * 60)
+  return `PT${wholeHours}H${minutes}M0S`
+}
+
+function normalizeProjectUnits(value: number) {
+  if (!value) return 0
+  return value > 10 ? value / 100 : value
 }
 
 function xmlEscape(value: string) {

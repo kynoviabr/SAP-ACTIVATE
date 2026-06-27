@@ -96,8 +96,12 @@ function getWeight(task: Pick<EditableMacroTask, 'hours' | 'start_date' | 'end_d
   return Math.max(1, Number(task.hours || 0) || countBusinessDays(task.start_date, task.end_date, [], task.is_milestone) || 1)
 }
 
-export function normalizeMacroTasksForSave(projectId: string, tasks: EditableMacroTask[]): CreateMacroScheduleTaskInput[] {
-  return recalcParentAggregates(renumberWbs(tasks)).map((task, index) => ({
+export function normalizeMacroTasksForSave(projectId: string, tasks: EditableMacroTask[], options: { preserveWbs?: boolean } = {}): CreateMacroScheduleTaskInput[] {
+  const normalized = options.preserveWbs
+    ? recalcParentAggregates(sortMacroTasks(tasks))
+    : recalcParentAggregates(renumberWbs(tasks))
+
+  return normalized.map((task, index) => ({
     project_id: projectId,
     wbs: task.wbs,
     parent_id: task.parent_id,
@@ -116,6 +120,18 @@ export function normalizeMacroTasksForSave(projectId: string, tasks: EditableMac
     level: Math.max(1, Math.min(8, task.level || 2)),
     sort_order: index + 1,
     notes: task.notes || undefined,
+    source_uid: task.source_uid,
+    source_id: task.source_id,
+    source_outline_number: task.source_outline_number,
+    source_outline_level: task.source_outline_level,
+    source_calendar_uid: task.source_calendar_uid,
+    source_constraint_type: task.source_constraint_type,
+    source_constraint_date: task.source_constraint_date,
+    source_is_summary: task.source_is_summary,
+    source_is_critical: task.source_is_critical,
+    source_is_active: task.source_is_active,
+    source_is_manual: task.source_is_manual,
+    source_raw: task.source_raw,
   }))
 }
 

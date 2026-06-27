@@ -107,9 +107,9 @@ export function useMacroSchedule(projectId?: string) {
     },
   })
 
-  async function replaceTasks(nextTasks: (MacroScheduleTask | CreateMacroScheduleTaskInput)[]) {
+  async function replaceTasks(nextTasks: (MacroScheduleTask | CreateMacroScheduleTaskInput)[], options: { preserveWbs?: boolean } = {}) {
     if (!id) return
-    const normalized = normalizeMacroTasksForSave(id, nextTasks)
+    const normalized = normalizeMacroTasksForSave(id, nextTasks, options)
     if (isDemo || !realDbEnabled) {
       setDemoTasks(normalized.map(hydrateDemoTask))
       setLastSyncedAt(new Date())

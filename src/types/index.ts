@@ -189,6 +189,18 @@ export interface MacroScheduleTask extends BaseEntity {
   level: number
   sort_order: number
   notes?: string
+  source_uid?: number
+  source_id?: number
+  source_outline_number?: string
+  source_outline_level?: number
+  source_calendar_uid?: number
+  source_constraint_type?: number
+  source_constraint_date?: string
+  source_is_summary?: boolean
+  source_is_critical?: boolean
+  source_is_active?: boolean
+  source_is_manual?: boolean
+  source_raw?: Record<string, unknown>
 }
 
 export interface MacroScheduleHoliday extends BaseEntity {
