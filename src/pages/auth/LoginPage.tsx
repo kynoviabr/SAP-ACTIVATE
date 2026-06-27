@@ -279,11 +279,6 @@ export default function AuthPage() {
             ))}
           </div>
 
-          {!isSupabaseConfigured && (
-            <Message tone="warning">
-              Supabase não configurado. Login real e cadastro ficam bloqueados; modo demo disponível.
-            </Message>
-          )}
           {error && <Message tone="error">{error}</Message>}
           {success && <Message tone="success">{success}</Message>}
 
