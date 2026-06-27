@@ -1,368 +1,646 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { cloneElement, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useParams } from 'react-router-dom'
-import { CalendarDays, Diamond, Download, FileInput, FileSpreadsheet, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
-import GanttChart from '@/components/gantt/GanttChart'
-import { formatDate, PHASE_COLORS } from '@/lib/utils'
-import { useTasks } from '@/hooks/useTasks'
-import type { PhaseNumber, Task, TaskStatus, TaskType } from '@/types'
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Bot,
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  Copy,
+  Diamond,
+  Download,
+  FileInput,
+  Globe2,
+  Image as ImageIcon,
+  PlusCircle,
+  RefreshCcw,
+  Save,
+  Scissors,
+  Sparkles,
+  Trash2,
+  Wrench,
+  X,
+} from 'lucide-react'
+import { useMacroSchedule } from '@/hooks/useMacroSchedule'
+import {
+  MACRO_PHASE_COLORS,
+  MACRO_PHASES,
+  MACRO_ZOOM_LABELS,
+  MACRO_ZOOMS,
+  calcLineSPI,
+  clampNumber,
+  countBusinessDays,
+  createEmptyMacroTask,
+  formatSPI,
+  isMilestoneLike,
+  normalizeMacroTasksForSave,
+  parsePredecessors,
+  recalcParentAggregates,
+  renumberWbs,
+  seedMacroScheduleTasks,
+  sortMacroTasks,
+} from '@/lib/macroSchedule'
+import type { CreateMacroScheduleTaskInput, MacroSchedulePhase, MacroScheduleTask, MacroScheduleZoom } from '@/types'
 
-const statuses: TaskStatus[] = ['pendente', 'em_andamento', 'concluido', 'atrasado', 'cancelado']
-const phases: PhaseNumber[] = ['1', '2', '3', '4', '5']
+type MacroRow = MacroScheduleTask | (CreateMacroScheduleTaskInput & { id: string; tenant_id?: string; created_at?: string; updated_at?: string })
+type Lang = 'pt' | 'en' | 'es' | 'zh'
+type MenuName = 'ai' | 'import' | 'holidays' | null
+
+const zoomLabels = MACRO_ZOOM_LABELS
 
 export default function MacroSchedulePage() {
-  const { projectId } = useParams()
-  const { tasks, isLoading } = useTasks(projectId)
+  const { projectId = 'local' } = useParams()
   const excelInputRef = useRef<HTMLInputElement>(null)
   const projectInputRef = useRef<HTMLInputElement>(null)
-  const [view, setView] = useState<'table' | 'timeline'>('table')
-  const [search, setSearch] = useState('')
-  const [phase, setPhase] = useState<PhaseNumber | ''>('')
-  const [status, setStatus] = useState<TaskStatus | ''>('')
-  const [localTasks, setLocalTasks] = useState<Task[]>([])
-  const [importMessage, setImportMessage] = useState<string | null>(null)
-  const storageKey = `sap-activate:macro-schedule:${projectId ?? 'local'}`
-  const [draft, setDraft] = useState<Partial<Task>>({
-    wbs: '1.6',
-    title: '',
-    phase: '1',
-    type: 'task',
-    start_date: '2026-06-22',
-    end_date: '2026-06-26',
-    assignee: '',
-    status: 'pendente',
-    progress_pct: 0,
-    planned_hours: 8,
-    actual_hours: 0,
-  })
+  const autosaveRef = useRef<number | undefined>(undefined)
+  const {
+    tasks,
+    holidays,
+    holidayDates,
+    isLoading,
+    isSaving,
+    lastSyncedAt,
+    replaceTasks,
+    replaceWithTemplate,
+    addNationalHolidays,
+    detectAndAddHolidays,
+    clearHolidays,
+    forceSync,
+    clearCacheAndSync,
+  } = useMacroSchedule(projectId)
+
+  const [rows, setRows] = useState<MacroRow[]>([])
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [view, setView] = useState<'schedule' | 'timeline'>('schedule')
+  const [zoom, setZoom] = useState<MacroScheduleZoom>('month')
+  const [menu, setMenu] = useState<MenuName>(null)
+  const [lang, setLang] = useState<Lang>('pt')
+  const [message, setMessage] = useState('')
+  const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(storageKey)
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as Task[]
-        if (Array.isArray(parsed) && parsed.length) {
-          setLocalTasks(parsed)
-          return
-        }
-      } catch {
-        window.localStorage.removeItem(storageKey)
-      }
-    }
-    if (tasks.length) setLocalTasks(tasks)
-  }, [storageKey, tasks])
+    if (dirty) return
+    setRows(sortMacroTasks(tasks) as MacroRow[])
+  }, [dirty, tasks])
 
   useEffect(() => {
-    if (localTasks.length) window.localStorage.setItem(storageKey, JSON.stringify(localTasks))
-  }, [localTasks, storageKey])
+    if (!dirty) return
+    window.clearTimeout(autosaveRef.current)
+    autosaveRef.current = window.setTimeout(() => {
+      replaceTasks(rows)
+        .then(() => {
+          setDirty(false)
+          setMessage('Cronograma sincronizado.')
+        })
+        .catch((error) => setMessage(`Falha ao salvar: ${(error as Error).message}`))
+    }, 900)
+    return () => window.clearTimeout(autosaveRef.current)
+  }, [dirty, replaceTasks, rows])
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    return localTasks.filter((task) => {
-      const text = `${task.wbs} ${task.title} ${task.assignee ?? ''}`.toLowerCase()
-      return (!term || text.includes(term)) && (!phase || task.phase === phase) && (!status || task.status === status)
-    }).sort((a, b) => a.sort_order - b.sort_order)
-  }, [localTasks, phase, search, status])
+  const normalizedRows = useMemo(() => recalcParentAggregates(renumberWbs(rows)), [rows])
+  const scheduleStats = useMemo(() => ({
+    total: normalizedRows.length,
+    milestones: normalizedRows.filter((row) => row.is_milestone).length,
+    avgReal: normalizedRows.length ? Math.round(normalizedRows.reduce((sum, row) => sum + row.real_pct, 0) / normalizedRows.length) : 0,
+    avgPlanned: normalizedRows.length ? Math.round(normalizedRows.reduce((sum, row) => sum + row.planned_pct, 0) / normalizedRows.length) : 0,
+  }), [normalizedRows])
 
-  const summary = useMemo(() => ({
-    total: filtered.length,
-    milestones: filtered.filter((task) => task.type === 'milestone').length,
-    completed: filtered.filter((task) => task.status === 'concluido').length,
-    progress: filtered.length ? Math.round(filtered.reduce((sum, task) => sum + task.progress_pct, 0) / filtered.length) : 0,
-  }), [filtered])
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const id = `local-task-${Date.now()}`
-    setLocalTasks((current) => [...current, {
-      id,
-      tenant_id: 'local',
-      project_id: projectId ?? 'local',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      parent_id: undefined,
-      wbs: draft.wbs ?? `${current.length + 1}.0`,
-      title: draft.title ?? '',
-      phase: draft.phase ?? '1',
-      type: draft.type ?? 'task',
-      start_date: draft.start_date,
-      end_date: draft.end_date,
-      duration_days: getDuration(draft.start_date, draft.end_date),
-      assignee: draft.assignee,
-      status: draft.status ?? 'pendente',
-      progress_pct: Number(draft.progress_pct ?? 0),
-      planned_hours: Number(draft.planned_hours ?? 0),
-      actual_hours: Number(draft.actual_hours ?? 0),
-      dependencies: [],
-      notes: draft.notes,
-      sort_order: current.length + 100,
-    }])
-    setDraft((current) => ({ ...current, title: '', assignee: '', progress_pct: 0 }))
+  function applyRows(updater: (current: MacroRow[]) => MacroRow[], save = true) {
+    setRows((current) => recalcParentAggregates(renumberWbs(updater(current))) as MacroRow[])
+    if (save) setDirty(true)
   }
 
-  function updateTask(taskId: string, input: Partial<Task>) {
-    setLocalTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...input, updated_at: new Date().toISOString() } : task))
+  function updateRow(rowId: string, input: Partial<MacroRow>) {
+    applyRows((current) => current.map((row) => {
+      if (row.id !== rowId) return row
+      const next = { ...row, ...input }
+      if (input.is_milestone && next.start_date) next.end_date = next.start_date
+      if (next.is_milestone && input.start_date) next.end_date = input.start_date
+      return next
+    }))
   }
 
-  function removeTask(taskId: string) {
-    setLocalTasks((current) => current.filter((task) => task.id !== taskId))
+  function addTask() {
+    const last = normalizedRows[normalizedRows.length - 1]
+    const task = createEmptyMacroTask(projectId, normalizedRows.length + 1, last?.phase ?? 'Prepare')
+    applyRows((current) => [...current, withLocalId(task)])
+  }
+
+  function insertBelow(index: number) {
+    const current = normalizedRows[index]
+    const task = withLocalId({
+      ...createEmptyMacroTask(projectId, index + 2, current?.phase ?? 'Prepare'),
+      level: current?.level ?? 2,
+    })
+    applyRows((items) => [...items.slice(0, index + 1), task, ...items.slice(index + 1)])
+  }
+
+  function duplicateRow(index: number) {
+    const current = normalizedRows[index]
+    if (!current) return
+    applyRows((items) => [...items.slice(0, index + 1), { ...current, id: localId(), title: `${current.title} (cópia)` }, ...items.slice(index + 1)])
+  }
+
+  function removeRow(index: number) {
+    const removeIds = new Set(getBlock(normalizedRows, index).map((row) => row.id))
+    applyRows((items) => items.filter((row) => !removeIds.has(row.id)))
+    setSelected((items) => new Set(Array.from(items).filter((id) => !removeIds.has(id))))
+  }
+
+  function indentRow(index: number) {
+    if (index <= 0) return
+    applyRows((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, level: Math.min(8, row.level + 1) } : row))
+  }
+
+  function outdentRow(index: number) {
+    applyRows((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, level: Math.max(1, row.level - 1) } : row))
+  }
+
+  function moveBlock(index: number, direction: -1 | 1) {
+    const block = getBlock(normalizedRows, index)
+    if (!block.length) return
+    const blockIds = new Set(block.map((row) => row.id))
+    const rest = normalizedRows.filter((row) => !blockIds.has(row.id))
+    const anchorIndex = rest.findIndex((row) => row.sort_order > block[0].sort_order)
+    const insertAt = direction < 0
+      ? Math.max(0, index - 1)
+      : Math.min(rest.length, anchorIndex < 0 ? rest.length : anchorIndex + 1)
+    const next = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)]
+    applyRows(() => next)
+  }
+
+  function toggleSelected(rowId: string) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(rowId)) next.delete(rowId)
+      else next.add(rowId)
+      return next
+    })
+  }
+
+  async function deleteSelected() {
+    if (!selected.size) return
+    if (!window.confirm(`Remover ${selected.size} tarefa(s) selecionada(s)?`)) return
+    applyRows((items) => items.filter((row) => !selected.has(row.id)))
+    setSelected(new Set())
+  }
+
+  async function clearAll() {
+    if (!window.confirm('Remover todas as tarefas do cronograma?')) return
+    setRows([])
+    setSelected(new Set())
+    setDirty(false)
+    await replaceTasks([])
+    setMessage('Cronograma limpo.')
+  }
+
+  async function applyTemplate() {
+    if (!window.confirm('Aplicar template substitui o cronograma atual. Continuar?')) return
+    const seeded = seedMacroScheduleTasks(projectId).map(withLocalId)
+    setRows(seeded)
+    setDirty(false)
+    await replaceWithTemplate()
+    setMessage('Template aplicado.')
+  }
+
+  function validateNames() {
+    applyRows((items) => items.map((row) => row.responsible?.trim() ? row : { ...row, responsible: row.squad || row.responsible }))
+    setMessage('Nomes validados: responsáveis vazios foram preenchidos pela squad.')
   }
 
   async function exportExcel() {
-    const XLSX = await loadXlsx()
-    const rows = localTasks
-      .sort((a, b) => a.sort_order - b.sort_order)
-      .map(taskToExcelRow)
-    const worksheet = XLSX.utils.json_to_sheet(rows)
+    const XLSX = await import('xlsx')
+    const worksheet = XLSX.utils.json_to_sheet(normalizedRows.map((row, index) => taskToExcelRow(row, index, holidayDates)))
     worksheet['!cols'] = [
-      { wch: 10 }, { wch: 34 }, { wch: 8 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
-      { wch: 10 }, { wch: 22 }, { wch: 16 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 26 },
+      { wch: 5 }, { wch: 8 }, { wch: 42 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 8 }, { wch: 12 },
+      { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 14 }, { wch: 10 },
     ]
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Cronograma Macro')
-    XLSX.writeFile(workbook, `cronograma-macro-${projectId ?? 'projeto'}.xlsx`)
-  }
-
-  async function exportExcelTemplate() {
-    const XLSX = await loadXlsx()
-    const rows = [
-      {
-        WBS: '1.1',
-        Tarefa: 'Nome da atividade',
-        Fase: '1',
-        Tipo: 'task',
-        Início: '2026-06-01',
-        Fim: '2026-06-05',
-        Duração: 5,
-        Responsável: 'Nome',
-        Status: 'pendente',
-        Progresso: 0,
-        'Horas Planejadas': 40,
-        'Horas Reais': 0,
-        Dependências: '',
-        Notas: 'Observações',
-      },
-    ]
-    const worksheet = XLSX.utils.json_to_sheet(rows)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Modelo')
-    XLSX.writeFile(workbook, 'modelo-cronograma-macro.xlsx')
+    XLSX.writeFile(workbook, `cronograma-macro-${projectId}.xlsx`)
   }
 
   async function importExcel(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    if (!window.confirm('A carga substituirá o cronograma atual. Continuar?')) return
     try {
-      const XLSX = await loadXlsx()
-      const data = await file.arrayBuffer()
-      const workbook = XLSX.read(data, { type: 'array', cellDates: true })
+      const XLSX = await import('xlsx')
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
-      const imported = rows.map((row, index) => excelRowToTask(row, index, projectId ?? 'local', XLSX))
-      mergeImportedTasks(imported, `Importadas ${imported.length} tarefas do Excel.`)
+      const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
+      const imported = data.map((row, index) => excelRowToTask(row, index, projectId, XLSX)).map(withLocalId)
+      setRows(imported)
+      setDirty(false)
+      await replaceTasks(imported)
+      setMessage(`Importadas ${imported.length} tarefa(s) do Excel.`)
     } catch (error) {
-      setImportMessage(`Falha ao importar Excel: ${(error as Error).message}`)
+      setMessage(`Falha na importação: ${(error as Error).message}`)
     }
   }
 
-  function resetSchedule() {
-    window.localStorage.removeItem(storageKey)
-    setLocalTasks(tasks)
-    setImportMessage('Cronograma restaurado para os dados do projeto/demo.')
-  }
-
   function exportProjectXml() {
-    downloadText(`cronograma-ms-project-${projectId ?? 'projeto'}.xml`, buildProjectXml(localTasks), 'application/xml;charset=utf-8')
+    downloadText(`cronograma-macro-${projectId}.xml`, buildProjectXml(normalizedRows), 'application/xml;charset=utf-8')
   }
 
   async function importProjectXml(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    if (!window.confirm('A carga substituirá o cronograma atual. Continuar?')) return
     try {
-      const text = await file.text()
-      const imported = parseProjectXml(text, projectId ?? 'local')
-      mergeImportedTasks(imported, `Importadas ${imported.length} tarefas do MS Project XML.`)
+      const imported = parseProjectXml(await file.text(), projectId).map(withLocalId)
+      setRows(imported)
+      setDirty(false)
+      await replaceTasks(imported)
+      setMessage(`Importadas ${imported.length} tarefa(s) do MS Project XML.`)
     } catch (error) {
-      setImportMessage(`Falha ao importar MS Project XML: ${(error as Error).message}`)
+      setMessage(`Falha na importação XML: ${(error as Error).message}`)
     }
   }
 
-  function mergeImportedTasks(imported: Task[], message: string) {
-    if (!imported.length) {
-      setImportMessage('Nenhuma tarefa encontrada no arquivo.')
-      return
-    }
-    setLocalTasks((current) => {
-      const existingKeys = new Set(current.map((task) => `${task.wbs}|${task.title}`.toLowerCase()))
-      const next = imported.filter((task) => !existingKeys.has(`${task.wbs}|${task.title}`.toLowerCase()))
-      return [...current, ...next.map((task, index) => ({ ...task, sort_order: current.length + index + 100 }))]
-    })
-    setImportMessage(message)
+  async function addHolidays2026And2027() {
+    await addNationalHolidays([2026, 2027])
+    setMessage('Feriados nacionais 2026/2027 adicionados.')
+  }
+
+  async function addDetectedHolidays() {
+    await detectAndAddHolidays()
+    setMessage('Feriados do período do cronograma adicionados.')
+  }
+
+  async function clearAllHolidays() {
+    await clearHolidays()
+    setMessage('Feriados removidos.')
+  }
+
+  async function recalcWithHolidays() {
+    applyRows((items) => items.map((row) => {
+      if (row.is_milestone || !row.start_date || !row.end_date) return row
+      const days = countBusinessDays(row.start_date, row.end_date, holidayDates)
+      return { ...row, hours: Math.max(row.hours || 0, days * 8) }
+    }))
+    setMessage('Horas recalculadas considerando dias úteis e feriados.')
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8">
-      <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <span className="badge badge-blue">Fase 1 - Prepare</span>
-          <h1 className="mt-3 text-2xl font-bold text-text-primary">Cronograma Macro</h1>
-          <p className="mt-1 text-sm text-text-secondary">Tarefas, marcos executivos e visualização Gantt do roadmap Activate.</p>
-        </div>
-        <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
-          <button className="btn-secondary btn-sm" type="button" onClick={() => excelInputRef.current?.click()}><FileInput className="h-3.5 w-3.5" /> Importar Excel</button>
-          <button className="btn-secondary btn-sm" type="button" onClick={exportExcelTemplate}><FileSpreadsheet className="h-3.5 w-3.5" /> Modelo</button>
-          <button className="btn-secondary btn-sm" type="button" onClick={exportExcel}><Download className="h-3.5 w-3.5" /> Excel</button>
-          <button className="btn-secondary btn-sm" type="button" onClick={() => projectInputRef.current?.click()}><FileInput className="h-3.5 w-3.5" /> Importar Project</button>
-          <button className="btn-secondary btn-sm" type="button" onClick={exportProjectXml}><Download className="h-3.5 w-3.5" /> Project XML</button>
-          <button className="btn-secondary btn-sm" type="button" onClick={resetSchedule}><RotateCcw className="h-3.5 w-3.5" /> Reset</button>
-          <button className={`section-tab ${view === 'table' ? 'active' : ''}`} type="button" onClick={() => setView('table')}>Cronograma</button>
-          <button className={`section-tab ${view === 'timeline' ? 'active' : ''}`} type="button" onClick={() => setView('timeline')}>Timeline</button>
-          <input ref={excelInputRef} className="hidden" type="file" accept=".xlsx,.xls,.csv" onChange={importExcel} />
-          <input ref={projectInputRef} className="hidden" type="file" accept=".xml,.mpp" onChange={importProjectXml} />
-        </div>
-      </header>
-
-      <section className="mb-5 grid gap-4 md:grid-cols-4">
-        <Kpi label="Tarefas" value={summary.total} />
-        <Kpi label="Marcos" value={summary.milestones} />
-        <Kpi label="Concluídas" value={summary.completed} />
-        <Kpi label="Progresso" value={`${summary.progress}%`} />
-      </section>
-
-      <section className="card2 mb-5 grid gap-3 lg:grid-cols-[1fr_160px_180px_auto] lg:items-end">
-        <label><span className="label">Busca</span><input className="input" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
-        <Select label="Fase" value={phase} options={['', ...phases]} onChange={(value) => setPhase(value as PhaseNumber | '')} />
-        <Select label="Status" value={status} options={['', ...statuses]} onChange={(value) => setStatus(value as TaskStatus | '')} />
-        <span className="badge badge-blue self-end">{filtered.length} tarefas</span>
-      </section>
-
-      {importMessage ? (
-        <div className="mb-5 rounded-[8px] border border-brand-600 bg-[#0f1229] px-4 py-3 text-sm text-text-secondary">
-          {importMessage}
-        </div>
-      ) : null}
-
-      {view === 'table' ? (
-        <>
-          <form className="card mb-5" onSubmit={submit}>
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-text-primary">Novo item macro</h2>
-              <button className="btn-primary" type="submit"><Plus className="h-4 w-4" /> Adicionar</button>
+    <div className="mx-auto max-w-[1800px] px-4 py-6">
+      <section className="card min-h-[calc(100vh-140px)] overflow-hidden p-0">
+        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-surface-border px-5 py-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-[#0f1229] text-brand-600">
+                <CalendarDays className="h-5 w-5" />
+              </span>
+              <div>
+                <h1 className="text-xl font-bold text-text-primary">Cronograma Macro</h1>
+                <p className="text-sm text-text-secondary">Cronograma estilo Gantt com tarefas por fase, responsáveis, datas e dependências.</p>
+              </div>
             </div>
-            <div className="grid gap-4 md:grid-cols-6">
-              <Input label="WBS" value={draft.wbs ?? ''} onChange={(wbs) => setDraft((d) => ({ ...d, wbs }))} />
-              <label className="md:col-span-2"><span className="label">Tarefa / Marco</span><input className="input" required value={draft.title ?? ''} onChange={(event) => setDraft((d) => ({ ...d, title: event.target.value }))} /></label>
-              <Select label="Fase" value={draft.phase ?? '1'} options={phases} onChange={(value) => setDraft((d) => ({ ...d, phase: value as PhaseNumber }))} />
-              <Select label="Tipo" value={draft.type ?? 'task'} options={['phase', 'task', 'milestone']} onChange={(value) => setDraft((d) => ({ ...d, type: value as TaskType }))} />
-              <Select label="Status" value={draft.status ?? 'pendente'} options={statuses} onChange={(value) => setDraft((d) => ({ ...d, status: value as TaskStatus }))} />
-              <Input label="Início" type="date" value={draft.start_date ?? ''} onChange={(start_date) => setDraft((d) => ({ ...d, start_date }))} />
-              <Input label="Fim" type="date" value={draft.end_date ?? ''} onChange={(end_date) => setDraft((d) => ({ ...d, end_date }))} />
-              <Input label="Responsável" value={draft.assignee ?? ''} onChange={(assignee) => setDraft((d) => ({ ...d, assignee }))} />
-              <Input label="Progresso %" type="number" value={String(draft.progress_pct ?? 0)} onChange={(progress_pct) => setDraft((d) => ({ ...d, progress_pct: Number(progress_pct) }))} />
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+              <button className="btn-secondary btn-sm" type="button" title="Traduzir os rótulos fixos; o conteúdo digitado é preservado." onClick={() => setLang(nextLang(lang))}>
+                <Globe2 className="h-3.5 w-3.5" /> {lang.toUpperCase()}
+              </button>
+              <button className="btn-secondary btn-sm" type="button" title={syncTitle(lastSyncedAt)} onClick={forceSync}>
+                <RefreshCcw className="h-3.5 w-3.5" /> {lastSyncedAt ? `Última sincronização: ${lastSyncedAt.toLocaleTimeString('pt-BR')}` : 'Sincronizar'}
+              </button>
+              <button className="btn-secondary btn-sm" type="button" onClick={clearCacheAndSync}>Limpar cache</button>
             </div>
-          </form>
+          </div>
+          <button className="btn-secondary btn-sm" type="button" onClick={() => window.history.back()}>
+            <X className="h-4 w-4" /> Fechar
+          </button>
+        </header>
 
-          <section className="card overflow-hidden p-0">
-            {isLoading ? <div className="p-6 text-text-secondary">Carregando cronograma...</div> : (
-              <table className="data-table min-w-[1040px]">
-                <thead><tr><th>WBS</th><th>Tarefa / Marco</th><th>Fase</th><th>Início</th><th>Fim</th><th>Duração</th><th>Responsável</th><th>Status</th><th>Progresso</th><th>Ações</th></tr></thead>
-                <tbody>
-                  {filtered.map((task) => (
-                    <tr key={task.id} className={task.type === 'phase' ? 'selected' : undefined}>
-                      <td><span className="wbs-badge">{task.wbs}</span></td>
-                      <td className={`text-text-primary ${task.type === 'phase' ? 'font-bold' : ''}`}>
-                        <span className="inline-flex items-center gap-2">{task.type === 'milestone' ? <Diamond className="h-3.5 w-3.5 text-warn" /> : null}{task.title}</span>
-                      </td>
-                      <td><span className="badge" style={{ background: PHASE_COLORS[task.phase ?? '1'], color: '#fff' }}>F{task.phase}</span></td>
-                      <td>{formatDate(task.start_date)}</td>
-                      <td>{formatDate(task.end_date)}</td>
-                      <td>{getDuration(task.start_date, task.end_date)}d</td>
-                      <td>{task.assignee ?? '-'}</td>
-                      <td><StatusSelect value={task.status} onChange={(next) => updateTask(task.id, { status: next })} /></td>
-                      <td><input className="input w-20" type="number" value={task.progress_pct} onChange={(event) => updateTask(task.id, { progress_pct: Number(event.target.value) })} /></td>
-                      <td><button className="btn-danger btn-sm" type="button" onClick={() => removeTask(task.id)}><Trash2 className="h-3.5 w-3.5" /></button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </section>
-        </>
-      ) : (
-        <section className="space-y-5">
-          <div className="card2 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-text-primary">Timeline Gantt</h2>
-              <p className="text-sm text-text-secondary">Visão executiva por fases, marcos e progresso planejado.</p>
-            </div>
+        <div className="border-b border-surface-border px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2">
-              {['Dia', 'Semana', 'Mês', 'Trimestre'].map((item) => <span key={item} className="badge badge-gray">{item}</span>)}
+              <button className="btn-primary btn-sm" type="button" onClick={addTask}><PlusCircle className="h-4 w-4" /> Adicionar tarefa</button>
+              <button
+                className="btn-secondary btn-sm"
+                type="button"
+                title="Recalcula agregações pai/filho (% Real, % Planejado, SPI) e re-renderiza a tabela. Use depois de várias edições inline para sincronizar os valores."
+                onClick={() => applyRows((items) => items)}
+              >
+                <RefreshCcw className="h-4 w-4" /> Atualizar
+              </button>
+              <DropdownButton active={menu === 'ai'} onClick={() => setMenu(menu === 'ai' ? null : 'ai')} icon={<Bot className="h-4 w-4" />} label="Recursos IA" />
+              <DropdownButton active={menu === 'import'} onClick={() => setMenu(menu === 'import' ? null : 'import')} icon={<FileInput className="h-4 w-4" />} label="Import/Export de Cronograma" />
+              <DropdownButton active={menu === 'holidays'} onClick={() => setMenu(menu === 'holidays' ? null : 'holidays')} icon={<CalendarDays className="h-4 w-4" />} label="Feriados" />
+              <button className="btn-danger btn-sm" type="button" onClick={deleteSelected} disabled={!selected.size}><Trash2 className="h-4 w-4" /> Selecionados</button>
+              <button className="btn-danger btn-sm" type="button" onClick={clearAll}><Trash2 className="h-4 w-4" /> Limpar tudo</button>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-text-secondary">
+              {isSaving || dirty ? <span className="badge badge-blue">Salvando...</span> : <span className="badge badge-green">Sincronizado</span>}
+              <span className="font-semibold text-text-primary">{normalizedRows.length} tarefa(s)</span>
             </div>
           </div>
-          <GanttChart tasks={filtered} title="Cronograma Macro" />
-          <div className="card2 flex flex-wrap gap-3 text-xs text-text-secondary">
-            <span className="inline-flex items-center gap-2"><span className="h-3 w-px bg-danger" /> Hoje</span>
-            <span className="inline-flex items-center gap-2"><Diamond className="h-3.5 w-3.5 text-warn" /> Marco</span>
-            <span className="inline-flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-text-muted" /> Fim de semana/feriados: referência visual planejada</span>
-          </div>
-        </section>
-      )}
 
-      <div className="mt-5 flex justify-end">
-        <button className="btn-green" type="button"><Save className="h-4 w-4" /> Marcar como revisado</button>
-      </div>
+          {menu ? (
+            <div className="mt-3 flex flex-wrap gap-2 rounded-[8px] border border-surface-border bg-[#0f1229]/55 p-3">
+              {menu === 'ai' ? (
+                <>
+                  <MenuAction icon={<FileInput className="h-4 w-4" />} label="Aplicar template" text="Aplica um cronograma-modelo — SUBSTITUI o cronograma atual." onClick={applyTemplate} />
+                  <MenuAction icon={<ImageIcon className="h-4 w-4" />} label="Importar de imagem (IA)" text="Planejado: extrair tarefas, fases e datas de imagem." onClick={() => setMessage('Importação por imagem IA está preparada no menu, pendente de endpoint de visão.')} />
+                  <MenuAction icon={<Scissors className="h-4 w-4" />} label="IA: do Detalhado" text="Planejado: consolidar Cronograma Detalhado em macro." onClick={() => setMessage('Geração a partir do cronograma detalhado está pendente da fonte detalhada.')} />
+                  <MenuAction icon={<Sparkles className="h-4 w-4" />} label="IA: preencher responsáveis" text="Não sobrescreve valores preenchidos." onClick={() => setMessage('Sugestão por IA depende do cadastro de recursos do Setup.')} />
+                  <MenuAction icon={<Wrench className="h-4 w-4" />} label="Validar nomes" text="Sem IA: preenche responsável vazio com a squad." onClick={validateNames} />
+                </>
+              ) : null}
+              {menu === 'import' ? (
+                <>
+                  <MenuAction icon={<Download className="h-4 w-4" />} label="Baixar Excel" text="Exporta todas as colunas do cronograma." onClick={exportExcel} />
+                  <MenuAction icon={<FileInput className="h-4 w-4" />} label="Carga de novo cronograma" text="Excel ou CSV; substitui o cronograma atual." onClick={() => excelInputRef.current?.click()} />
+                  <MenuAction icon={<Download className="h-4 w-4" />} label="Baixar MS Project XML" text="Exporta XML compatível com MS Project." onClick={exportProjectXml} />
+                  <MenuAction icon={<FileInput className="h-4 w-4" />} label="Carga MS Project XML" text="XML substitui o cronograma atual." onClick={() => projectInputRef.current?.click()} />
+                  <input ref={excelInputRef} className="hidden" type="file" accept=".xlsx,.xls,.csv" onChange={importExcel} />
+                  <input ref={projectInputRef} className="hidden" type="file" accept=".xml" onChange={importProjectXml} />
+                </>
+              ) : null}
+              {menu === 'holidays' ? (
+                <>
+                  <MenuAction icon={<CalendarDays className="h-4 w-4" />} label="Adicionar feriados 2026/2027" text="Inclui feriados nacionais brasileiros fixos e móveis." onClick={addHolidays2026And2027} />
+                  <MenuAction icon={<CalendarDays className="h-4 w-4" />} label="Detectar período e adicionar" text="Usa menor início e maior fim do cronograma." onClick={addDetectedHolidays} />
+                  <MenuAction icon={<RefreshCcw className="h-4 w-4" />} label="Recalcular com feriados" text="Atualiza horas por dias úteis." onClick={recalcWithHolidays} />
+                  <MenuAction icon={<Trash2 className="h-4 w-4" />} label="Remover todos os feriados" text={`${holidays.length} feriado(s) cadastrado(s).`} onClick={clearAllHolidays} />
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
+          {message ? <div className="mt-3 rounded-[8px] border border-brand-600/40 bg-brand-600/10 px-3 py-2 text-sm text-text-secondary">{message}</div> : null}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button className={`section-tab ${view === 'schedule' ? 'active' : ''}`} type="button" onClick={() => setView('schedule')}>Cronograma</button>
+            <button className={`section-tab ${view === 'timeline' ? 'active' : ''}`} type="button" onClick={() => setView('timeline')}>Timeline</button>
+          </div>
+        </div>
+
+        <div className="p-5">
+          {isLoading ? (
+            <div className="p-10 text-center text-text-secondary">Carregando cronograma...</div>
+          ) : view === 'schedule' ? (
+            <ScheduleTable
+              rows={normalizedRows}
+              selected={selected}
+              holidays={holidayDates}
+              onSelect={toggleSelected}
+              onChange={updateRow}
+              onIndent={indentRow}
+              onOutdent={outdentRow}
+              onMove={moveBlock}
+              onInsert={insertBelow}
+              onDuplicate={duplicateRow}
+              onRemove={removeRow}
+            />
+          ) : (
+            <Timeline rows={normalizedRows} holidays={holidayDates} zoom={zoom} onZoom={setZoom} />
+          )}
+        </div>
+
+        <footer className="flex justify-end border-t border-surface-border px-5 py-4">
+          <button className="btn-green" type="button" onClick={() => setMessage('Cronograma marcado como revisado.')}>
+            <Save className="h-4 w-4" /> Marcar como revisado
+          </button>
+        </footer>
+      </section>
     </div>
   )
 }
 
-function getDuration(start?: string, end?: string) {
-  if (!start || !end) return 0
-  return Math.max(1, Math.round((new Date(`${end}T12:00:00`).getTime() - new Date(`${start}T12:00:00`).getTime()) / 86_400_000) + 1)
+function ScheduleTable({ rows, selected, holidays, onSelect, onChange, onIndent, onOutdent, onMove, onInsert, onDuplicate, onRemove }: {
+  rows: MacroRow[]
+  selected: Set<string>
+  holidays: string[]
+  onSelect: (id: string) => void
+  onChange: (id: string, input: Partial<MacroRow>) => void
+  onIndent: (index: number) => void
+  onOutdent: (index: number) => void
+  onMove: (index: number, direction: -1 | 1) => void
+  onInsert: (index: number) => void
+  onDuplicate: (index: number) => void
+  onRemove: (index: number) => void
+}) {
+  return (
+    <div className="overflow-auto rounded-[8px] border border-surface-border">
+      <table className="data-table min-w-[1780px]">
+        <thead>
+          <tr>
+            <th className="w-10">☐</th>
+            <th>#</th>
+            <th>WBS</th>
+            <th>Tarefa</th>
+            <th>Fase</th>
+            <th>Squad</th>
+            <th>Responsável</th>
+            <th>% Aloc</th>
+            <th>Início</th>
+            <th>Fim</th>
+            <th>Dias</th>
+            <th>% Real</th>
+            <th>% Plan.</th>
+            <th>SPI</th>
+            <th>Pred.</th>
+            <th>Horas</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => {
+            const milestone = isMilestoneLike(row)
+            const hasChildren = Boolean(rows[index + 1] && rows[index + 1].level > row.level)
+            return (
+              <tr key={row.id} className={hasChildren ? 'selected' : undefined}>
+                <td>
+                  <input title="Marca esta linha para mover/apagar em massa" type="checkbox" checked={selected.has(row.id)} onChange={() => onSelect(row.id)} />
+                </td>
+                <td>{index + 1}</td>
+                <td><span className="wbs-badge">{row.wbs}</span></td>
+                <td style={{ paddingLeft: `${Math.max(0, row.level - 1) * 14}px` }}>
+                  <div className="flex items-center gap-2">
+                    {milestone ? <Diamond className="h-3.5 w-3.5 fill-warn text-warn" /> : null}
+                    <input className="input min-w-[280px]" value={row.title} onChange={(event) => onChange(row.id, { title: event.target.value })} />
+                  </div>
+                </td>
+                <td>
+                  <select className="input min-w-[110px]" value={row.phase} onChange={(event) => onChange(row.id, { phase: event.target.value as MacroSchedulePhase })}>
+                    {MACRO_PHASES.map((phase) => <option key={phase} value={phase}>{phase}</option>)}
+                  </select>
+                </td>
+                <td><input className="input min-w-[120px]" value={row.squad ?? ''} onChange={(event) => onChange(row.id, { squad: event.target.value })} /></td>
+                <td><input className="input min-w-[150px]" value={row.responsible ?? ''} onChange={(event) => onChange(row.id, { responsible: event.target.value })} /></td>
+                <td><NumberCell value={row.allocation_pct} onChange={(allocation_pct) => onChange(row.id, { allocation_pct })} /></td>
+                <td><input className="input min-w-[138px]" type="date" value={row.start_date ?? ''} onChange={(event) => onChange(row.id, { start_date: event.target.value })} /></td>
+                <td>
+                  <input
+                    className="input min-w-[138px]"
+                    type="date"
+                    title={milestone ? 'Marcos têm fim = início (zero duração)' : undefined}
+                    value={row.end_date ?? ''}
+                    onChange={(event) => onChange(row.id, { end_date: event.target.value })}
+                  />
+                </td>
+                <td>{countBusinessDays(row.start_date, row.end_date, holidays, milestone)}</td>
+                <td><NumberCell value={row.real_pct} onChange={(real_pct) => onChange(row.id, { real_pct })} /></td>
+                <td><NumberCell value={row.planned_pct} onChange={(planned_pct) => onChange(row.id, { planned_pct })} /></td>
+                <td><span className={spiClass(calcLineSPI(row.real_pct, row.planned_pct))}>{formatSPI(row.real_pct, row.planned_pct)}</span></td>
+                <td><input className="input min-w-[100px]" placeholder="ex: 5, 12" value={row.predecessors.join(', ')} onChange={(event) => onChange(row.id, { predecessors: parsePredecessors(event.target.value) })} /></td>
+                <td><NumberCell max={99999} value={row.hours} onChange={(hours) => onChange(row.id, { hours })} /></td>
+                <td>
+                  <div className="flex gap-1">
+                    <IconAction label="Desindentar" onClick={() => onOutdent(index)}><ArrowLeft /></IconAction>
+                    <IconAction label="Indentar" onClick={() => onIndent(index)}><ArrowRight /></IconAction>
+                    <IconAction label="Mover para cima" onClick={() => onMove(index, -1)}><ArrowUp /></IconAction>
+                    <IconAction label="Mover para baixo" onClick={() => onMove(index, 1)}><ArrowDown /></IconAction>
+                    <IconAction label="Inserir nova linha" onClick={() => onInsert(index)}><PlusCircle /></IconAction>
+                    <IconAction label="Marco/Milestone" onClick={() => onChange(row.id, { is_milestone: !row.is_milestone, end_date: row.start_date ?? row.end_date })}><Diamond /></IconAction>
+                    <IconAction label="Duplicar tarefa" onClick={() => onDuplicate(index)}><Copy /></IconAction>
+                    <IconAction label="Remover tarefa" danger onClick={() => onRemove(index)}><X /></IconAction>
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
-function Kpi({ label, value }: { label: string; value: string | number }) {
-  return <div className="card2"><span className="text-sm text-text-secondary">{label}</span><strong className="mt-2 block text-2xl text-text-primary">{value}</strong></div>
+function Timeline({ rows, holidays, zoom, onZoom }: { rows: MacroRow[]; holidays: string[]; zoom: MacroScheduleZoom; onZoom: (zoom: MacroScheduleZoom) => void }) {
+  const datedRows = rows.filter((row) => row.start_date && row.end_date)
+  const range = getTimelineRange(datedRows)
+  const units = getTimelineUnits(range.start, range.end, zoom)
+  const totalMs = Math.max(1, range.end.getTime() - range.start.getTime())
+  const todayLeft = `${clampNumber((Date.now() - range.start.getTime()) / totalMs * 100, 0, 100)}%`
+
+  return (
+    <section className="space-y-4">
+      <div className="card2 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-text-primary">Timeline Gantt</h2>
+          <p className="text-sm text-text-secondary">Linha vermelha tracejada = hoje · áreas hachuradas = feriados · cinza claro = fim de semana</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {MACRO_ZOOMS.map((item) => (
+            <button key={item} className={`section-tab ${zoom === item ? 'active' : ''}`} type="button" onClick={() => onZoom(item)}>
+              {zoomLabels[item]}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="overflow-auto rounded-[8px] border border-surface-border bg-surface-card">
+        <div className="min-w-[1180px]">
+          <div className="grid grid-cols-[300px_1fr] border-b border-surface-border text-xs text-text-secondary">
+            <div className="sticky left-0 z-10 bg-surface-card p-3 font-semibold text-text-primary">WBS + tarefa</div>
+            <div className="grid" style={{ gridTemplateColumns: `repeat(${units.length}, minmax(${unitWidth(zoom)}px, 1fr))` }}>
+              {units.map((unit) => <div key={unit.key} className="border-l border-surface-border p-3 text-center">{unit.label}</div>)}
+            </div>
+          </div>
+          <div className="relative">
+            <div className="absolute bottom-0 top-0 z-10 border-l border-dashed border-danger" style={{ left: `calc(300px + (${todayLeft}))` }} />
+            {datedRows.map((row) => {
+              const milestone = isMilestoneLike(row)
+              const left = `${clampNumber((new Date(`${row.start_date}T12:00:00`).getTime() - range.start.getTime()) / totalMs * 100, 0, 100)}%`
+              const width = `${milestone ? 0 : clampNumber((new Date(`${row.end_date}T12:00:00`).getTime() - new Date(`${row.start_date}T12:00:00`).getTime()) / totalMs * 100, 0.4, 100)}%`
+              return (
+                <div key={row.id} className="grid grid-cols-[300px_1fr] border-b border-surface-border/60 text-xs">
+                  <div className="sticky left-0 z-10 truncate bg-surface-card p-3 text-text-secondary">
+                    <span className="wbs-badge mr-2">{row.wbs}</span>{row.title}
+                  </div>
+                  <div className="relative h-10 bg-[#0f1229]">
+                    <TimelineBackground range={range} holidays={holidays} />
+                    {milestone ? (
+                      <div className="absolute top-3 h-4 w-4 rotate-45 rounded-[3px] bg-warn" style={{ left }} title={row.title} />
+                    ) : (
+                      <div
+                        className="absolute top-2 h-6 rounded-[6px]"
+                        style={{ left, width, background: barColor(row) }}
+                        title={`${row.wbs} ${row.title}`}
+                      />
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
 }
 
-function Input({ label, value, onChange, type = 'text' }: { label: string; value: string; type?: string; onChange: (value: string) => void }) {
-  return <label><span className="label">{label}</span><input className="input" type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>
+function TimelineBackground({ range, holidays }: { range: { start: Date; end: Date }; holidays: string[] }) {
+  const overlays = []
+  const totalMs = Math.max(1, range.end.getTime() - range.start.getTime())
+  const current = new Date(range.start)
+  while (current <= range.end) {
+    const iso = current.toISOString().slice(0, 10)
+    const day = current.getDay()
+    const left = `${clampNumber((current.getTime() - range.start.getTime()) / totalMs * 100, 0, 100)}%`
+    const width = `${clampNumber(86_400_000 / totalMs * 100, 0.2, 100)}%`
+    if (day === 0 || day === 6) overlays.push(<span key={`w-${iso}`} className="absolute bottom-0 top-0 bg-white/5" style={{ left, width }} />)
+    if (holidays.includes(iso)) overlays.push(<span key={`h-${iso}`} className="absolute bottom-0 top-0 opacity-40" style={{ left, width, backgroundImage: 'repeating-linear-gradient(45deg, rgba(245,158,11,0.35) 0 4px, transparent 4px 8px)' }} />)
+    current.setDate(current.getDate() + 1)
+  }
+  return <>{overlays}</>
 }
 
-function Select({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
-  return <label><span className="label">{label}</span><select className="input" value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option || 'all'} value={option}>{option || 'Todos'}</option>)}</select></label>
+function NumberCell({ value, onChange, max = 100 }: { value: number; max?: number; onChange: (value: number) => void }) {
+  return <input className="input w-20" type="number" min={0} max={max} value={value} onChange={(event) => onChange(clampNumber(event.target.value, 0, max))} />
 }
 
-function StatusSelect({ value, onChange }: { value: TaskStatus; onChange: (value: TaskStatus) => void }) {
-  return <select className="badge badge-blue border-0" value={value} onChange={(event) => onChange(event.target.value as TaskStatus)}>{statuses.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+function DropdownButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
+  return <button className={`btn-secondary btn-sm ${active ? 'border-brand-600' : ''}`} type="button" onClick={onClick}>{icon}{label}<ChevronDown className="h-3.5 w-3.5" /></button>
 }
 
-function taskToExcelRow(task: Task) {
+function MenuAction({ icon, label, text, onClick }: { icon: React.ReactNode; label: string; text: string; onClick: () => void }) {
+  return (
+    <button className="btn-secondary btn-sm max-w-[290px] justify-start text-left" type="button" title={text} onClick={onClick}>
+      {icon}
+      <span className="flex flex-col">
+        <span>{label}</span>
+        <span className="text-[10px] font-normal text-text-muted">{text}</span>
+      </span>
+    </button>
+  )
+}
+
+function IconAction({ children, label, danger, onClick }: { children: React.ReactElement; label: string; danger?: boolean; onClick: () => void }) {
+  return (
+    <button className={`inline-flex h-8 w-8 items-center justify-center rounded-[8px] border ${danger ? 'border-danger/40 text-danger' : 'border-surface-border text-text-secondary'} bg-[#0f1229] hover:border-brand-600 hover:text-text-primary`} type="button" title={label} onClick={onClick}>
+      {cloneElement(children, { className: 'h-3.5 w-3.5' })}
+    </button>
+  )
+}
+
+function taskToExcelRow(row: MacroRow, index: number, holidays: string[]) {
   return {
-    WBS: task.wbs,
-    Tarefa: task.title,
-    Fase: task.phase ?? '',
-    Tipo: task.type,
-    Início: task.start_date ?? '',
-    Fim: task.end_date ?? '',
-    Duração: getDuration(task.start_date, task.end_date),
-    Responsável: task.assignee ?? '',
-    Status: task.status,
-    Progresso: task.progress_pct,
-    'Horas Planejadas': task.planned_hours,
-    'Horas Reais': task.actual_hours,
-    Dependências: task.dependencies.join(', '),
-    Notas: task.notes ?? '',
+    '#': index + 1,
+    WBS: row.wbs,
+    Tarefa: row.title,
+    Fase: row.phase,
+    Squad: row.squad ?? '',
+    Responsável: row.responsible ?? '',
+    '% Aloc': row.allocation_pct,
+    Início: row.start_date ?? '',
+    Fim: row.end_date ?? '',
+    Dias: countBusinessDays(row.start_date, row.end_date, holidays, row.is_milestone),
+    '% Real': row.real_pct,
+    '% Plan.': row.planned_pct,
+    SPI: formatSPI(row.real_pct, row.planned_pct),
+    'Pred.': row.predecessors.join(', '),
+    Horas: row.hours,
+    Marco: row.is_milestone ? 'Sim' : 'Não',
+    Nivel: row.level,
   }
 }
 
-type XlsxModule = typeof import('xlsx')
-
-async function loadXlsx(): Promise<XlsxModule> {
-  return await import('xlsx')
-}
-
-function excelRowToTask(row: Record<string, unknown>, index: number, projectId: string, xlsx?: XlsxModule): Task {
+function excelRowToTask(row: Record<string, unknown>, index: number, projectId: string, xlsx: typeof import('xlsx')): CreateMacroScheduleTaskInput {
   const get = (...keys: string[]) => {
     for (const key of keys) {
       const value = row[key]
@@ -370,123 +648,158 @@ function excelRowToTask(row: Record<string, unknown>, index: number, projectId: 
     }
     return ''
   }
-  const start = normalizeDate(get('Início', 'Inicio', 'Start', 'Start Date'), xlsx)
-  const end = normalizeDate(get('Fim', 'End', 'Finish', 'Finish Date'), xlsx) || start
-  const phase = normalizePhase(get('Fase', 'Phase'))
-  const type = normalizeType(get('Tipo', 'Type'))
-  const status = normalizeStatus(get('Status'))
-  const wbs = String(get('WBS', 'wbs') || `${index + 1}.0`)
-  const title = String(get('Tarefa', 'Task Name', 'Nome', 'Name', 'Atividade') || `Tarefa ${index + 1}`)
-
+  const start = normalizeDate(get('Início', 'Inicio', 'Start'), xlsx)
+  const end = normalizeDate(get('Fim', 'Finish', 'End'), xlsx)
+  const milestone = String(get('Marco', 'Milestone')).toLowerCase().startsWith('s') || start === end
   return {
-    id: `import-excel-${Date.now()}-${index}`,
-    tenant_id: 'local',
     project_id: projectId,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    parent_id: undefined,
-    wbs,
-    title,
-    phase,
-    type,
-    start_date: start,
-    end_date: end,
-    duration_days: getDuration(start, end),
-    assignee: String(get('Responsável', 'Responsavel', 'Resource Names', 'Assigned To') || ''),
-    status,
-    progress_pct: normalizeNumber(get('Progresso', '% Concluído', '% Complete', 'Percent Complete'), 0),
-    planned_hours: normalizeNumber(get('Horas Planejadas', 'Planned Hours', 'Work'), 0),
-    actual_hours: normalizeNumber(get('Horas Reais', 'Actual Hours', 'Actual Work'), 0),
-    dependencies: String(get('Dependências', 'Dependencias', 'Predecessors') || '').split(',').map((item) => item.trim()).filter(Boolean),
-    notes: String(get('Notas', 'Notes') || ''),
+    wbs: String(get('WBS') || `1.${index + 1}`),
+    title: String(get('Tarefa', 'Name', 'Task Name') || `Tarefa ${index + 1}`),
+    phase: normalizeMacroPhase(get('Fase', 'Phase')),
+    squad: String(get('Squad', 'Módulo', 'Modulo') || ''),
+    responsible: String(get('Responsável', 'Responsavel', 'Resource Names') || ''),
+    allocation_pct: clampNumber(get('% Aloc', 'Allocation'), 0, 100),
+    start_date: start || undefined,
+    end_date: milestone ? start || end || undefined : end || undefined,
+    is_milestone: milestone,
+    planned_pct: clampNumber(get('% Plan.', '% Plan', 'Planned'), 0, 100),
+    real_pct: clampNumber(get('% Real', 'Percent Complete', 'Progresso'), 0, 100),
+    predecessors: parsePredecessors(String(get('Pred.', 'Predecessors') || '')),
+    hours: Math.max(0, Number(get('Horas', 'Work') || 0)),
+    level: Math.max(1, Number(get('Nivel', 'Level') || String(get('WBS') || '').split('.').length || 2)),
     sort_order: index + 1,
+    notes: '',
   }
 }
 
-function buildProjectXml(tasks: Task[]) {
-  const sorted = tasks.slice().sort((a, b) => a.sort_order - b.sort_order)
-  const rows = sorted.map((task, index) => {
-    const uid = index + 1
-    const outlineLevel = Math.max(1, task.wbs.split('.').filter(Boolean).length)
-    const percent = Math.max(0, Math.min(100, Math.round(task.progress_pct ?? 0)))
-    return `    <Task>
-      <UID>${uid}</UID>
-      <ID>${uid}</ID>
-      <Name>${xmlEscape(task.title)}</Name>
-      <Type>1</Type>
-      <IsNull>0</IsNull>
-      <CreateDate>${toProjectDate(task.created_at)}</CreateDate>
-      <WBS>${xmlEscape(task.wbs)}</WBS>
-      <OutlineNumber>${xmlEscape(task.wbs)}</OutlineNumber>
-      <OutlineLevel>${outlineLevel}</OutlineLevel>
-      <Start>${toProjectDate(task.start_date)}</Start>
-      <Finish>${toProjectDate(task.end_date)}</Finish>
-      <Duration>PT${Math.max(1, getDuration(task.start_date, task.end_date) * 8)}H0M0S</Duration>
-      <Milestone>${task.type === 'milestone' ? 1 : 0}</Milestone>
-      <PercentComplete>${percent}</PercentComplete>
-      <Notes>${xmlEscape(task.notes ?? '')}</Notes>
-    </Task>`
-  }).join('\n')
-
+function buildProjectXml(rows: MacroRow[]) {
+  const tasks = normalizeMacroTasksForSave('project', rows)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Project xmlns="http://schemas.microsoft.com/project">
-  <Name>Cronograma Macro SAP Activate</Name>
-  <Title>Cronograma Macro SAP Activate</Title>
+  <Name>Cronograma Macro</Name>
   <ScheduleFromStart>1</ScheduleFromStart>
-  <StartDate>${toProjectDate(sorted[0]?.start_date)}</StartDate>
-  <FinishDate>${toProjectDate(sorted[sorted.length - 1]?.end_date)}</FinishDate>
-  <MinutesPerDay>480</MinutesPerDay>
-  <MinutesPerWeek>2400</MinutesPerWeek>
-  <DaysPerMonth>20</DaysPerMonth>
   <Tasks>
-${rows}
+${tasks.map((task, index) => `    <Task>
+      <UID>${index + 1}</UID>
+      <ID>${index + 1}</ID>
+      <Name>${xmlEscape(task.title)}</Name>
+      <WBS>${xmlEscape(task.wbs)}</WBS>
+      <OutlineNumber>${xmlEscape(task.wbs)}</OutlineNumber>
+      <OutlineLevel>${task.level}</OutlineLevel>
+      <Start>${toProjectDate(task.start_date)}</Start>
+      <Finish>${toProjectDate(task.end_date)}</Finish>
+      <Milestone>${task.is_milestone ? 1 : 0}</Milestone>
+      <PercentComplete>${task.real_pct}</PercentComplete>
+      <Notes>${xmlEscape(task.notes ?? '')}</Notes>
+    </Task>`).join('\n')}
   </Tasks>
-</Project>
-`
+</Project>`
 }
 
-function parseProjectXml(text: string, projectId: string): Task[] {
+function parseProjectXml(text: string, projectId: string): CreateMacroScheduleTaskInput[] {
   const doc = new DOMParser().parseFromString(text, 'application/xml')
   const parseError = doc.querySelector('parsererror')
   if (parseError) throw new Error('XML inválido.')
-  const taskNodes = Array.from(doc.getElementsByTagNameNS('*', 'Task'))
-  return taskNodes.map((node, index) => {
-    const title = getXmlText(node, 'Name') || `Tarefa ${index + 1}`
-    const wbs = getXmlText(node, 'WBS') || getXmlText(node, 'OutlineNumber') || `${index + 1}.0`
-    const start = normalizeProjectDate(getXmlText(node, 'Start'))
-    const end = normalizeProjectDate(getXmlText(node, 'Finish')) || start
-    const type: TaskType = getXmlText(node, 'Milestone') === '1' ? 'milestone' : 'task'
+  return Array.from(doc.getElementsByTagNameNS('*', 'Task')).map((node, index) => {
+    const wbs = getXmlText(node, 'WBS') || getXmlText(node, 'OutlineNumber') || `1.${index + 1}`
+    const start = normalizeDate(getXmlText(node, 'Start'))
+    const end = normalizeDate(getXmlText(node, 'Finish')) || start
+    const milestone = getXmlText(node, 'Milestone') === '1' || start === end
     return {
-      id: `import-project-${Date.now()}-${index}`,
-      tenant_id: 'local',
       project_id: projectId,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      parent_id: undefined,
       wbs,
-      title,
-      phase: normalizePhase(wbs.split('.')[0]),
-      type,
-      start_date: start,
-      end_date: end,
-      duration_days: getDuration(start, end),
-      assignee: '',
-      status: normalizeStatus('pendente'),
-      progress_pct: normalizeNumber(getXmlText(node, 'PercentComplete'), 0),
-      planned_hours: getDuration(start, end) * 8,
-      actual_hours: 0,
-      dependencies: [],
-      notes: getXmlText(node, 'Notes'),
+      title: getXmlText(node, 'Name') || `Tarefa ${index + 1}`,
+      phase: normalizeMacroPhase(wbs.split('.')[0]),
+      squad: '',
+      responsible: '',
+      allocation_pct: 100,
+      start_date: start || undefined,
+      end_date: end || undefined,
+      is_milestone: milestone,
+      planned_pct: 0,
+      real_pct: clampNumber(getXmlText(node, 'PercentComplete'), 0, 100),
+      predecessors: [],
+      hours: 0,
+      level: Math.max(1, Number(getXmlText(node, 'OutlineLevel')) || wbs.split('.').length),
       sort_order: index + 1,
+      notes: getXmlText(node, 'Notes'),
     }
   }).filter((task) => task.title && task.title !== '0')
 }
 
-function getXmlText(node: Element, tagName: string) {
-  return node.getElementsByTagNameNS('*', tagName)[0]?.textContent?.trim() ?? ''
+function getBlock(rows: MacroRow[], index: number) {
+  const first = rows[index]
+  if (!first) return []
+  const block = [first]
+  for (let i = index + 1; i < rows.length; i += 1) {
+    if (rows[i].level <= first.level) break
+    block.push(rows[i])
+  }
+  return block
 }
 
-function normalizeDate(value: unknown, xlsx?: XlsxModule) {
+function getTimelineRange(rows: MacroRow[]) {
+  const starts = rows.map((row) => new Date(`${row.start_date}T12:00:00`).getTime()).filter(Number.isFinite)
+  const ends = rows.map((row) => new Date(`${row.end_date}T12:00:00`).getTime()).filter(Number.isFinite)
+  return {
+    start: new Date(Math.min(...starts, Date.now())),
+    end: new Date(Math.max(...ends, Date.now() + 86_400_000)),
+  }
+}
+
+function getTimelineUnits(start: Date, end: Date, zoom: MacroScheduleZoom) {
+  const units: Array<{ key: string; label: string }> = []
+  const current = new Date(start)
+  current.setHours(12, 0, 0, 0)
+  if (zoom === 'month' || zoom === 'quarter') current.setDate(1)
+  while (current <= end) {
+    const key = current.toISOString().slice(0, 10)
+    units.push({ key, label: unitLabel(current, zoom) })
+    if (zoom === 'day') current.setDate(current.getDate() + 1)
+    if (zoom === 'week') current.setDate(current.getDate() + 7)
+    if (zoom === 'month') current.setMonth(current.getMonth() + 1)
+    if (zoom === 'quarter') current.setMonth(current.getMonth() + 3)
+  }
+  return units
+}
+
+function unitLabel(date: Date, zoom: MacroScheduleZoom) {
+  if (zoom === 'day') return String(date.getDate())
+  if (zoom === 'week') return `S${Math.ceil(date.getDate() / 7)}`
+  if (zoom === 'quarter') return `${date.getFullYear()}·T${Math.floor(date.getMonth() / 3) + 1}`
+  return date.toLocaleDateString('pt-BR', { month: 'short' })
+}
+
+function unitWidth(zoom: MacroScheduleZoom) {
+  return zoom === 'day' ? 34 : zoom === 'week' ? 74 : zoom === 'month' ? 110 : 150
+}
+
+function barColor(row: MacroRow) {
+  if (row.real_pct >= 100) return '#10b981'
+  if (row.real_pct > 0) return MACRO_PHASE_COLORS[row.phase]
+  return `${MACRO_PHASE_COLORS[row.phase]}99`
+}
+
+function spiClass(spi: number | null) {
+  if (spi === null) return 'text-text-muted'
+  if (spi >= 1) return 'font-semibold text-success'
+  if (spi > 0) return 'font-semibold text-warn'
+  return 'font-semibold text-danger'
+}
+
+function normalizeMacroPhase(value: unknown): MacroSchedulePhase {
+  const text = String(value || '').toLowerCase()
+  const found = MACRO_PHASES.find((phase) => phase.toLowerCase() === text || phase.toLowerCase().startsWith(text))
+  if (found) return found
+  if (text === '1') return 'Prepare'
+  if (text === '2') return 'Explore'
+  if (text === '3') return 'Realize'
+  if (text === '4') return 'Deploy'
+  if (text === '5') return 'Run'
+  return 'Prepare'
+}
+
+function normalizeDate(value: unknown, xlsx?: typeof import('xlsx')) {
   if (!value) return ''
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10)
   if (typeof value === 'number' && xlsx) {
@@ -502,50 +815,16 @@ function normalizeDate(value: unknown, xlsx?: XlsxModule) {
   return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10)
 }
 
-function normalizeProjectDate(value: string) {
-  return normalizeDate(value)
-}
-
-function normalizePhase(value: unknown): PhaseNumber {
-  const text = String(value || '').replace(/\D/g, '')
-  return phases.includes(text as PhaseNumber) ? text as PhaseNumber : '1'
-}
-
-function normalizeType(value: unknown): TaskType {
-  const text = String(value || '').toLowerCase()
-  if (text.includes('milestone') || text.includes('marco')) return 'milestone'
-  if (text.includes('phase') || text.includes('fase')) return 'phase'
-  return 'task'
-}
-
-function normalizeStatus(value: unknown): TaskStatus {
-  const text = String(value || '').toLowerCase().replace(/\s+/g, '_')
-  if (statuses.includes(text as TaskStatus)) return text as TaskStatus
-  if (text.includes('complete') || text.includes('concl')) return 'concluido'
-  if (text.includes('progress') || text.includes('andamento')) return 'em_andamento'
-  if (text.includes('late') || text.includes('atras')) return 'atrasado'
-  if (text.includes('cancel')) return 'cancelado'
-  return 'pendente'
-}
-
-function normalizeNumber(value: unknown, fallback: number) {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  const parsed = Number(String(value || '').replace('%', '').replace(',', '.'))
-  return Number.isFinite(parsed) ? parsed : fallback
-}
-
-function toProjectDate(value?: string) {
-  const date = normalizeDate(value) || new Date().toISOString().slice(0, 10)
-  return `${date}T09:00:00`
+function getXmlText(node: Element, tagName: string) {
+  return node.getElementsByTagNameNS('*', tagName)[0]?.textContent?.trim() ?? ''
 }
 
 function xmlEscape(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;')
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+}
+
+function toProjectDate(value?: string) {
+  return `${normalizeDate(value) || new Date().toISOString().slice(0, 10)}T09:00:00`
 }
 
 function downloadText(filename: string, content: string, type: string) {
@@ -558,4 +837,25 @@ function downloadText(filename: string, content: string, type: string) {
   anchor.click()
   anchor.remove()
   URL.revokeObjectURL(url)
+}
+
+function localId() {
+  return `local-macro-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function withLocalId<T extends CreateMacroScheduleTaskInput>(task: T): T & { id: string } {
+  return { ...task, id: localId() }
+}
+
+function syncTitle(lastSyncedAt: Date | null) {
+  return lastSyncedAt
+    ? `Última sincronização: ${lastSyncedAt.toLocaleString('pt-BR')} — Clique para forçar atualização agora. Intervalo automático: 30s.`
+    : 'Clique para forçar atualização agora. Intervalo automático: 30s.'
+}
+
+function nextLang(lang: Lang): Lang {
+  if (lang === 'pt') return 'en'
+  if (lang === 'en') return 'es'
+  if (lang === 'es') return 'zh'
+  return 'pt'
 }

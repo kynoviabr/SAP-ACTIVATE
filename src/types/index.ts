@@ -4,6 +4,8 @@ export type ProjectStatus = 'verde' | 'amarelo' | 'vermelho' | 'encerrado'
 export type PhaseNumber   = '1' | '2' | '3' | '4' | '5'
 export type TaskStatus    = 'pendente' | 'em_andamento' | 'concluido' | 'atrasado' | 'cancelado'
 export type TaskType      = 'phase' | 'task' | 'milestone'
+export type MacroSchedulePhase = 'Prepare' | 'Explore' | 'Realize' | 'Deploy' | 'Run'
+export type MacroScheduleZoom  = 'day' | 'week' | 'month' | 'quarter'
 export type IssueStatus   = 'aberta' | 'em_andamento' | 'resolvida' | 'atrasada' | 'cancelada'
 export type IssuePriority = 'baixa' | 'media' | 'alta' | 'critica'
 export type IssueType     = 'tecnica' | 'processo' | 'gestao' | 'cliente' | 'escopo'
@@ -166,6 +168,39 @@ export interface Task extends BaseEntity {
 
 export type CreateTaskInput = Omit<Task, 'id'|'tenant_id'|'created_at'|'updated_at'>
 export type UpdateTaskInput = Partial<CreateTaskInput>
+
+// ── Macro Schedule ────────────────────────────────────────────
+export interface MacroScheduleTask extends BaseEntity {
+  project_id: string
+  wbs: string
+  parent_id?: string
+  title: string
+  phase: MacroSchedulePhase
+  squad?: string
+  responsible?: string
+  allocation_pct: number
+  start_date?: string
+  end_date?: string
+  is_milestone: boolean
+  planned_pct: number
+  real_pct: number
+  predecessors: number[]
+  hours: number
+  level: number
+  sort_order: number
+  notes?: string
+}
+
+export interface MacroScheduleHoliday extends BaseEntity {
+  project_id: string
+  holiday_date: string
+  name: string
+  source: 'manual' | 'br-national' | 'detected'
+}
+
+export type CreateMacroScheduleTaskInput = Omit<MacroScheduleTask, 'id'|'tenant_id'|'created_at'|'updated_at'>
+export type UpdateMacroScheduleTaskInput = Partial<CreateMacroScheduleTaskInput>
+export type MacroScheduleHolidayInput = Omit<MacroScheduleHoliday, 'id'|'tenant_id'|'created_at'|'updated_at'>
 
 // ── Issue ─────────────────────────────────────────────────────
 export interface Issue extends BaseEntity {

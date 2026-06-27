@@ -5,6 +5,8 @@ import type {
   Risk, CreateRiskInput, UpdateRiskInput,
   BPDItem, CreateBPDInput, UpdateBPDInput,
   Task, CreateTaskInput, UpdateTaskInput,
+  MacroScheduleTask, CreateMacroScheduleTaskInput, UpdateMacroScheduleTaskInput,
+  MacroScheduleHoliday, MacroScheduleHolidayInput,
   ProjectMember, Kickoff, ActivityLog,
   PhaseNumber, QGAnswerType,
   ProjectMemberInput,
@@ -118,6 +120,45 @@ export const tasksDB = {
   ),
   bulkInsert: (tasks: CreateTaskInput[]) => q<Task[]>(() =>
     supabase.from('tasks').insert(tasks).select()
+  ),
+}
+
+// ── Macro Schedule ────────────────────────────────────────────
+export const macroScheduleDB = {
+  listTasks: (projectId: string) => q<MacroScheduleTask[]>(() =>
+    supabase.from('macro_schedule_tasks').select('*').eq('project_id', projectId).order('sort_order')
+  ),
+  createTask: (input: CreateMacroScheduleTaskInput) => q<MacroScheduleTask>(() =>
+    supabase.from('macro_schedule_tasks').insert(input).select().single()
+  ),
+  updateTask: (id: string, input: UpdateMacroScheduleTaskInput) => q<MacroScheduleTask>(() =>
+    supabase.from('macro_schedule_tasks').update(input).eq('id', id).select().single()
+  ),
+  deleteTask: (id: string) => q<null>(() =>
+    supabase.from('macro_schedule_tasks').delete().eq('id', id)
+  ),
+  deleteProjectTasks: (projectId: string) => q<null>(() =>
+    supabase.from('macro_schedule_tasks').delete().eq('project_id', projectId)
+  ),
+  bulkInsertTasks: (tasks: CreateMacroScheduleTaskInput[]) => q<MacroScheduleTask[]>(() =>
+    supabase.from('macro_schedule_tasks').insert(tasks).select()
+  ),
+  replaceTasks: async (projectId: string, tasks: CreateMacroScheduleTaskInput[]) => {
+    await macroScheduleDB.deleteProjectTasks(projectId)
+    if (!tasks.length) return []
+    return macroScheduleDB.bulkInsertTasks(tasks)
+  },
+  listHolidays: (projectId: string) => q<MacroScheduleHoliday[]>(() =>
+    supabase.from('macro_schedule_holidays').select('*').eq('project_id', projectId).order('holiday_date')
+  ),
+  upsertHolidays: (holidays: MacroScheduleHolidayInput[]) => q<MacroScheduleHoliday[]>(() =>
+    supabase
+      .from('macro_schedule_holidays')
+      .upsert(holidays, { onConflict: 'project_id,holiday_date,name' })
+      .select()
+  ),
+  deleteHolidays: (projectId: string) => q<null>(() =>
+    supabase.from('macro_schedule_holidays').delete().eq('project_id', projectId)
   ),
 }
 
