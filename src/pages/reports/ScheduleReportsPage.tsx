@@ -162,7 +162,7 @@ export default function ScheduleReportsPage() {
 
         <ChartCard title="SPI operacional" badge={report.spiText}>
           <ResponsiveContainer width="100%" height={330}>
-            <AreaChart data={report.curve} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
+            <AreaChart data={report.spiCurve} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
               <CartesianGrid stroke="#2e3460" strokeDasharray="3 3" />
               <XAxis dataKey="label" stroke="#9ca3af" tick={{ fontSize: 11 }} />
               <YAxis stroke="#9ca3af" tick={{ fontSize: 11 }} domain={[0, 1.4]} />
@@ -325,7 +325,8 @@ function buildScheduleReport(sourceTasks: MacroScheduleTask[], holidays: string[
   const tasks = sortMacroTasks(sourceTasks).filter((task) => task.title)
   const totalHours = tasks.reduce((sum, task) => sum + taskWeight(task, holidays), 0) || 1
   const curve = buildCurve(tasks, holidays, totalHours)
-  const current = pointAtDate(curve, asOfIso) ?? curve[curve.length - 1] ?? emptyPoint()
+  const current = buildCurvePoint(tasks, holidays, totalHours, asOfIso)
+  const spiCurve = clampCurveToCurrentDate(curve, current)
   const pv = current.pv
   const ev = current.ev
   const sv = ev - pv
@@ -339,6 +340,7 @@ function buildScheduleReport(sourceTasks: MacroScheduleTask[], holidays: string[
   return {
     tasks,
     curve,
+    spiCurve,
     pv,
     ev,
     sv,
@@ -380,21 +382,31 @@ function buildCurve(tasks: MacroScheduleTask[], holidays: string[], totalHours: 
 
   while (cursor <= finish) {
     const date = cursor.toISOString().slice(0, 10)
-    const pv = tasks.reduce((sum, task) => sum + taskWeight(task, holidays) * plannedFraction(task, date), 0)
-    const ev = tasks.reduce((sum, task) => sum + taskWeight(task, holidays) * actualFraction(task, date), 0)
-    points.push({
-      date,
-      label: cursor.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-      planned: Math.round((pv / totalHours) * 100),
-      realized: Math.round((ev / totalHours) * 100),
-      pv: Math.round(pv * 10) / 10,
-      ev: Math.round(ev * 10) / 10,
-      spi: pv > 0 ? Math.round((ev / pv) * 100) / 100 : null,
-      baseline: 1,
-    })
+    points.push(buildCurvePoint(tasks, holidays, totalHours, date))
     cursor.setDate(cursor.getDate() + Math.max(1, Math.ceil((finish.getTime() - new Date(`${start}T12:00:00`).getTime()) / 86_400_000 / 32)))
   }
   return points
+}
+
+function buildCurvePoint(tasks: MacroScheduleTask[], holidays: string[], totalHours: number, date: string): CurvePoint {
+  const pv = tasks.reduce((sum, task) => sum + taskWeight(task, holidays) * plannedFraction(task, date), 0)
+  const ev = tasks.reduce((sum, task) => sum + taskWeight(task, holidays) * actualFraction(task, date), 0)
+  return {
+    date,
+    label: new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+    planned: Math.round((pv / totalHours) * 100),
+    realized: Math.round((ev / totalHours) * 100),
+    pv: Math.round(pv * 10) / 10,
+    ev: Math.round(ev * 10) / 10,
+    spi: pv > 0 ? Math.round((ev / pv) * 100) / 100 : null,
+    baseline: 1,
+  }
+}
+
+function clampCurveToCurrentDate(curve: CurvePoint[], current: CurvePoint) {
+  const past = curve.filter((point) => point.date < asOfIso)
+  const hasCurrent = curve.some((point) => point.date === asOfIso)
+  return hasCurrent ? curve.filter((point) => point.date <= asOfIso) : [...past, current]
 }
 
 function scheduleRange(tasks: MacroScheduleTask[]) {
@@ -439,10 +451,6 @@ function actualFraction(task: MacroScheduleTask, date: string) {
   const current = new Date(`${date}T12:00:00`).getTime()
   const today = asOf.getTime()
   return Math.max(0, Math.min(real, real * ((current - start) / Math.max(1, today - start))))
-}
-
-function pointAtDate(points: CurvePoint[], date: string) {
-  return points.find((point) => point.date >= date) ?? points[points.length - 1]
 }
 
 function buildForecast(tasks: MacroScheduleTask[], spi: number | null) {
