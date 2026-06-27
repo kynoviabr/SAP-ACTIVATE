@@ -119,8 +119,9 @@ export function useMacroSchedule(projectId?: string) {
       if (!id) return []
       return macroScheduleDB.replaceTasks(id, nextTasks)
     },
-    onSuccess: () => {
+    onSuccess: (savedTasks) => {
       setLastSyncedAt(new Date())
+      qc.setQueryData(['macro-schedule', id, 'tasks'], savedTasks)
       qc.invalidateQueries({ queryKey: ['macro-schedule', id] })
     },
   })
@@ -142,16 +143,17 @@ export function useMacroSchedule(projectId?: string) {
   })
 
   async function replaceTasks(nextTasks: (MacroScheduleTask | CreateMacroScheduleTaskInput)[], options: { preserveWbs?: boolean } = {}) {
-    if (!id) return
+    if (!id) return []
     const normalized = normalizeMacroTasksForSave(id, nextTasks, options)
     if (localMode) {
       const hydrated = normalized.map(hydrateDemoTask)
       setDemoTasks(hydrated)
+      qc.setQueryData(['macro-schedule', id, 'tasks'], hydrated)
       writeLocalItems(demoTasksKey(id), hydrated)
       setLastSyncedAt(new Date())
-      return
+      return hydrated
     }
-    await replaceMutation.mutateAsync(normalized)
+    return replaceMutation.mutateAsync(normalized)
   }
 
   async function replaceWithTemplate() {

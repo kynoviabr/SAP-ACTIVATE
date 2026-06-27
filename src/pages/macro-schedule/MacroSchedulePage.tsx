@@ -245,10 +245,11 @@ export default function MacroSchedulePage() {
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
       const imported = data.map((row, index) => excelRowToTask(row, index, projectId, XLSX)).map(withLocalId)
+      setMessage('Salvando carga do Excel...')
+      const saved = await replaceTasks(imported)
       setPreserveWbs(false)
-      setRows(imported)
+      setRows(saved as MacroRow[])
       setDirty(false)
-      await replaceTasks(imported)
       setMessage(`Importadas ${imported.length} tarefa(s) do Excel.`)
     } catch (error) {
       setMessage(`Falha na importação: ${(error as Error).message}`)
@@ -266,10 +267,11 @@ export default function MacroSchedulePage() {
     if (!window.confirm('A carga substituirá o cronograma atual. Continuar?')) return
     try {
       const imported = parseProjectXml(await file.text(), projectId).map(withLocalId)
+      setMessage('Salvando carga XML do MS Project...')
+      const saved = await replaceTasks(imported, { preserveWbs: true })
       setPreserveWbs(true)
-      setRows(imported)
+      setRows(saved as MacroRow[])
       setDirty(false)
-      await replaceTasks(imported, { preserveWbs: true })
       setMessage(`Importadas ${imported.length} tarefa(s) do MS Project XML com estrutura WBS preservada.`)
     } catch (error) {
       setMessage(`Falha na importação XML: ${(error as Error).message}`)
@@ -278,7 +280,8 @@ export default function MacroSchedulePage() {
 
   async function saveNow() {
     try {
-      await replaceTasks(rows, { preserveWbs })
+      const saved = await replaceTasks(rows, { preserveWbs })
+      setRows(saved as MacroRow[])
       setDirty(false)
       setMessage('Cronograma salvo agora.')
     } catch (error) {
