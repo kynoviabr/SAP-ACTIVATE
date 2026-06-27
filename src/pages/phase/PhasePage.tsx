@@ -9,6 +9,7 @@ const templatesByPhase: Record<PhaseNumber, Array<{ key: string; name: string; d
   '1': [
     { key: 'kickoff', name: 'Kickoff do Projeto', description: 'Identificação, pauta, ata e plano inicial.', path: 'kickoff' },
     { key: 'macro_schedule', name: 'Cronograma Macro', description: 'Marcos, fases e timeline executiva.', path: 'macro-schedule' },
+    { key: 'schedule_reports', name: 'Relatórios do Cronograma', description: 'SPI, EVM, evolução e alertas operacionais.', path: 'schedule-reports' },
     { key: 'scope', name: 'Definição de Escopo', description: 'Escopo, premissas e documentos.', path: 'scope' },
     { key: 'org', name: 'Organização e Comunicação', description: 'Rituais, stakeholders e canais.', path: 'organization' },
     { key: 'qg1', name: 'Quality Gate Fase 1', description: 'Checklist de aprovação da fase.', path: 'quality-gate/1' },

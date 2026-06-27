@@ -129,6 +129,7 @@ export default function HomePage() {
               <button className="btn-secondary btn-sm" type="button" onClick={() => navigate(`/projects/${activeProject.id}/change-requests`)}>CRs</button>
               <button className="btn-secondary btn-sm" type="button" onClick={() => navigate(`/projects/${activeProject.id}/billing`)}>Faturamento</button>
               <button className="btn-secondary btn-sm" type="button" onClick={() => navigate(`/projects/${activeProject.id}/travels`)}>Viagens</button>
+              <button className="btn-secondary btn-sm" type="button" onClick={() => navigate(`/projects/${activeProject.id}/schedule-reports`)}>Relatórios Cronograma</button>
               <button className="btn-secondary btn-sm" type="button" onClick={() => navigate(`/projects/${activeProject.id}/bpd`)}>BPD</button>
               <button className="btn-secondary btn-sm" type="button" onClick={() => navigate(`/projects/${activeProject.id}/assistant`)}>IA</button>
             </div>

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { useAuthStore } from '@/store'
 import { supabase, getCurrentUser } from '@/lib/supabase'
@@ -28,6 +28,8 @@ import AdminPage from '@/pages/admin/AdminPage'
 
 // Layout
 import AppLayout from '@/components/layout/AppLayout'
+
+const ScheduleReportsPage = lazy(() => import('@/pages/reports/ScheduleReportsPage'))
 
 // ── Guards ────────────────────────────────────────────────────
 function RequireAuth() {
@@ -95,6 +97,7 @@ export default function App() {
           <Route path="/projects/:projectId/billing" element={<BillingPage />} />
           <Route path="/projects/:projectId/travels" element={<TravelsPage />} />
           <Route path="/projects/:projectId/macro-schedule" element={<MacroSchedulePage />} />
+          <Route path="/projects/:projectId/schedule-reports" element={<Suspense fallback={<div className="p-8 text-text-secondary">Carregando relatórios...</div>}><ScheduleReportsPage /></Suspense>} />
           <Route path="/projects/:projectId/scope" element={<ScopeDefinitionPage />} />
           <Route path="/projects/:projectId/organization" element={<OrganizationCommunicationPage />} />
           <Route path="/projects/:projectId/templates/:templateKey" element={<TemplateWorkspacePage />} />
