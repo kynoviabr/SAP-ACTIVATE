@@ -54,8 +54,12 @@ export function useProjects() {
   })
 
   useEffect(() => {
-    if (query.data) setProjects(query.data)
-  }, [query.data, setProjects])
+    if (!realDbEnabled || !query.data) return
+    setProjects(query.data)
+    if (activeProject && !query.data.some((project) => project.id === activeProject.id)) {
+      setActiveProject(null)
+    }
+  }, [activeProject, query.data, realDbEnabled, setActiveProject, setProjects])
 
   useEffect(() => {
     if (!query.data && !storeProjects.length && !activeProject && demoProject) {
@@ -65,7 +69,7 @@ export function useProjects() {
   }, [activeProject, demoProject, query.data, setActiveProject, setProjects, storeProjects.length])
 
   const offlineProjects = storeProjects.length ? storeProjects : activeProject ? [activeProject] : demoProject ? [demoProject] : []
-  const projects = query.data ?? offlineProjects
+  const projects = realDbEnabled ? query.data ?? [] : offlineProjects
 
   const createMutation = useMutation({
     mutationFn: async (input: CreateProjectInput) => {

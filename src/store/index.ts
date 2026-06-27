@@ -35,6 +35,7 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password })
           if (authError || !authData.user) throw authError ?? new Error('Login failed')
+          useProjectStore.getState().resetProjectState()
 
           // Load user profile
           const { data: userProfile } = await supabase
@@ -63,6 +64,7 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: async () => {
         await supabase.auth.signOut()
+        useProjectStore.getState().resetProjectState()
         set({ user: null, tenant: null })
       },
 
@@ -87,6 +89,13 @@ export const useAuthStore = create<AuthStore>()(
 
         if (tenant) applyTenantTheme(tenant)
 
+        const projectState = useProjectStore.getState()
+        if (
+          projectState.activeProject?.id === 'demo-project' ||
+          (projectState.activeProject && projectState.activeProject.tenant_id !== userProfile.tenant_id)
+        ) {
+          projectState.resetProjectState()
+        }
         set({ user: userProfile, tenant, loading: false })
       },
 
@@ -126,6 +135,7 @@ interface ProjectStore {
   setProjects:      (projects: Project[]) => void
   setActiveProject: (project: Project | null) => void
   setActivePhase:   (phase: PhaseNumber) => void
+  resetProjectState: () => void
   setFilters:       (filters: Partial<ProjectFilters>) => void
   clearFilters:     () => void
   updateProject:    (id: string, updates: Partial<Project>) => void
@@ -143,6 +153,7 @@ export const useProjectStore = create<ProjectStore>()(
       setProjects:      (projects) => set({ projects }),
       setActiveProject: (project)  => set({ activeProject: project }),
       setActivePhase:   (phase)    => set({ activePhase: phase }),
+      resetProjectState: () => set({ projects: [], activeProject: null, activePhase: '1', filters: {} }),
 
       setFilters: (filters) => set((s) => ({
         filters: { ...s.filters, ...filters }
