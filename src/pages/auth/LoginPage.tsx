@@ -13,7 +13,6 @@ import {
   Mail,
   Monitor,
   PlayCircle,
-  Terminal,
   UserPlus,
 } from 'lucide-react'
 import { useAuthStore, useProjectStore } from '@/store'
@@ -82,7 +81,7 @@ export default function AuthPage() {
       return
     }
     if (!isSupabaseConfigured) {
-      setError('Login real indisponível: configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env.local. Use demo@sap.local / demo1234 ou super@sap.local / super1234 enquanto isso.')
+      setError('Login real indisponível: configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env.local. O modo demo continua disponível.')
       return
     }
     await login(data.email, data.password)
@@ -331,24 +330,6 @@ export default function AuthPage() {
                 <PlayCircle className="h-3.5 w-3.5" />
                 Entrar em modo demo
               </button>
-              <button
-                type="button"
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-[8px] border border-[#BFDBFE] bg-[rgba(37,99,235,0.06)] p-2.5 text-[13.5px] font-semibold tracking-[-0.1px] text-[#1D4ED8] transition hover:border-[#2563EB] hover:bg-[rgba(37,99,235,0.10)]"
-                onClick={() => handleDemoLogin('SUPER_ADMIN')}
-              >
-                <UserPlus className="h-3.5 w-3.5" />
-                Entrar como Super Admin
-              </button>
-              <div className="mt-2 overflow-hidden rounded-[8px] border border-[#E4E4E7] bg-white">
-                <div className="flex items-center gap-2 border-b border-[#E4E4E7] bg-[#F4F4F5] px-3 py-2">
-                  <Terminal className="h-3 w-3 text-[#A1A1AA]" strokeWidth={1.5} />
-                  <span className="font-mono text-[10.5px] uppercase tracking-[0.05em] text-[#A1A1AA]">Credenciais de demonstração</span>
-                </div>
-                <div className="px-3 py-2 font-mono text-[11.5px] tracking-[0.03em] text-[#71717A]">
-                  <div><span className="font-medium text-[#2563EB]">demo@sap.local</span> &nbsp;/&nbsp; <span className="font-medium text-[#2563EB]">demo1234</span></div>
-                  <div><span className="font-medium text-[#2563EB]">super@sap.local</span> &nbsp;/&nbsp; <span className="font-medium text-[#2563EB]">super1234</span></div>
-                </div>
-              </div>
             </form>
           )}
 
