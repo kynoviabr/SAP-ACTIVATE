@@ -1,9 +1,12 @@
 // src/components/layout/PhaseNav.tsx
+import { useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppIcon, PhaseIcon, StatusIcon } from '@/components/ui/AppIcons'
+import { useMacroSchedule } from '@/hooks/useMacroSchedule'
+import { buildScheduleAnalytics, scheduleStatusFromSpi } from '@/lib/scheduleAnalytics'
 import { useProjectStore } from '@/store'
 import { PHASE_INFO } from '@/types'
-import type { PhaseNumber } from '@/types'
+import type { PhaseNumber, ProjectStatus } from '@/types'
 
 export default function PhaseNav() {
   const { activeProject, setActivePhase } = useProjectStore()
@@ -11,8 +14,11 @@ export default function PhaseNav() {
   const { projectId, phase: currentPhase } = useParams()
 
   const id = projectId ?? activeProject?.id
-  const spi    = activeProject?.spi    ?? 1
-  const status = activeProject?.status ?? 'verde'
+  const { tasks: macroTasks, holidayDates } = useMacroSchedule(id)
+  const scheduleReport = useMemo(() => buildScheduleAnalytics(macroTasks, holidayDates), [holidayDates, macroTasks])
+  const hasMacroSchedule = scheduleReport.tasks.length > 0
+  const spi = hasMacroSchedule ? scheduleReport.spi ?? 1 : activeProject?.spi ?? 1
+  const status: ProjectStatus = hasMacroSchedule ? scheduleStatusFromSpi(spi) : activeProject?.status ?? 'verde'
   const golive = activeProject?.golive_date
   const daysLeft = golive
     ? Math.ceil((new Date(golive).getTime() - Date.now()) / 86_400_000)

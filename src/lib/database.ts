@@ -144,9 +144,25 @@ export const macroScheduleDB = {
     supabase.from('macro_schedule_tasks').insert(tasks).select()
   ),
   replaceTasks: async (projectId: string, tasks: CreateMacroScheduleTaskInput[]) => {
-    await macroScheduleDB.deleteProjectTasks(projectId)
-    if (!tasks.length) return []
-    return macroScheduleDB.bulkInsertTasks(tasks)
+    if (!tasks.length) {
+      await macroScheduleDB.deleteProjectTasks(projectId)
+      return []
+    }
+
+    const inserted = await macroScheduleDB.bulkInsertTasks(tasks)
+    const insertedIds = inserted.map((task) => task.id).filter(Boolean)
+
+    if (insertedIds.length) {
+      await q<null>(() =>
+        supabase
+          .from('macro_schedule_tasks')
+          .delete()
+          .eq('project_id', projectId)
+          .not('id', 'in', `(${insertedIds.join(',')})`)
+      )
+    }
+
+    return inserted
   },
   listHolidays: (projectId: string) => q<MacroScheduleHoliday[]>(() =>
     supabase.from('macro_schedule_holidays').select('*').eq('project_id', projectId).order('holiday_date')

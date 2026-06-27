@@ -104,7 +104,7 @@ export function normalizeMacroTasksForSave(projectId: string, tasks: EditableMac
   return normalized.map((task, index) => ({
     project_id: projectId,
     wbs: task.wbs,
-    parent_id: task.parent_id,
+    parent_id: undefined,
     title: task.title,
     phase: task.phase,
     squad: task.squad || undefined,

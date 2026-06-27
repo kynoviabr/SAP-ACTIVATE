@@ -7,15 +7,15 @@ import SPIGauge from '@/components/charts/SPIGauge'
 import PhaseProgress from '@/components/charts/PhaseProgress'
 import GanttChart from '@/components/gantt/GanttChart'
 import { activityDB, risksDB } from '@/lib/database'
+import { buildScheduleAnalytics, macroTasksToDashboardTasks, scheduleStatusFromSpi } from '@/lib/scheduleAnalytics'
 import { calcDaysToGoLive, formatDate, PHASE_LABELS } from '@/lib/utils'
+import { useMacroSchedule } from '@/hooks/useMacroSchedule'
 import { useProject } from '@/hooks/useProjects'
-import { useTasks } from '@/hooks/useTasks'
-import type { PhaseNumber } from '@/types'
 
 export default function DashboardPage() {
   const { projectId } = useParams()
   const projectQuery = useProject(projectId)
-  const { tasks, spiData, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(projectId)
+  const { tasks: macroTasks, holidayDates, isLoading: scheduleLoading, forceSync } = useMacroSchedule(projectId)
 
   const risksQuery = useQuery({
     queryKey: ['critical-risks', projectId],
@@ -34,29 +34,28 @@ export default function DashboardPage() {
   })
 
   const project = projectQuery.data
+  const scheduleReport = useMemo(() => buildScheduleAnalytics(macroTasks, holidayDates), [holidayDates, macroTasks])
+  const dashboardTasks = useMemo(() => macroTasksToDashboardTasks(scheduleReport.tasks), [scheduleReport.tasks])
   const phaseItems = useMemo(() => {
-    return (['1', '2', '3', '4', '5'] as PhaseNumber[]).map((phase) => {
-      const phaseTasks = tasks.filter((task) => task.phase === phase)
-      const progress = phaseTasks.length
-        ? phaseTasks.reduce((sum, task) => sum + task.progress_pct, 0) / phaseTasks.length
-        : project?.current_phase === phase ? project.progress_pct : Number(phase) < Number(project?.current_phase ?? 1) ? 100 : 0
-      return {
-        phase,
-        progress,
-        completed: phaseTasks.filter((task) => task.status === 'concluido').length,
-        total: phaseTasks.length,
-      }
-    })
-  }, [project?.current_phase, project?.progress_pct, tasks])
+    return scheduleReport.phaseSummaries.map((phase) => ({
+      phase: phase.phaseNumber,
+      progress: phase.realPct,
+      completed: phase.completed,
+      total: phase.total,
+    }))
+  }, [scheduleReport.phaseSummaries])
 
   const completedTemplates = phaseItems.reduce((sum, item) => sum + (item.completed ?? 0), 0)
   const totalTemplates = phaseItems.reduce((sum, item) => sum + (item.total ?? 0), 0)
   const daysToGoLive = calcDaysToGoLive(project?.golive_date)
-  const spi = spiData.spi || project?.spi || 1
+  const spi = scheduleReport.spi ?? project?.spi ?? 1
+  const scheduleStatus = scheduleReport.tasks.length
+    ? scheduleStatusFromSpi(spi)
+    : project?.status ?? '-'
 
   function refreshAll() {
     projectQuery.refetch()
-    refetchTasks()
+    forceSync()
     risksQuery.refetch()
     activityQuery.refetch()
   }
@@ -67,7 +66,10 @@ export default function DashboardPage() {
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-brand-600">Dashboard automático</p>
           <h1 className="mt-1 text-2xl font-bold text-text-primary">{project?.name ?? 'Dashboard do Projeto'}</h1>
-          <p className="mt-1 text-sm text-text-secondary">{project?.client ?? 'Selecione um projeto para ver indicadores automáticos.'}</p>
+          <p className="mt-1 text-sm text-text-secondary">
+            {project?.client ?? 'Selecione um projeto para ver indicadores automáticos.'}
+            {scheduleReport.tasks.length ? ' - Fonte: Cronograma Macro' : ''}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button className="btn-secondary" type="button" onClick={refreshAll}>
@@ -82,10 +84,10 @@ export default function DashboardPage() {
       </header>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Kpi title="Templates concluídos" value={`${completedTemplates}/${totalTemplates || 24}`} detail="AUTO" icon={<CheckCircle2 className="h-5 w-5" />} />
+        <Kpi title="Tarefas concluídas" value={`${completedTemplates}/${totalTemplates}`} detail="Cronograma Macro" icon={<CheckCircle2 className="h-5 w-5" />} />
         <Kpi title="Fase atual" value={project ? PHASE_LABELS[project.current_phase].short : '-'} detail="AUTO" icon={<Target className="h-5 w-5" />} />
         <Kpi title="Dias Go-Live" value={daysToGoLive || '-'} detail={formatDate(project?.golive_date)} icon={<CalendarDays className="h-5 w-5" />} />
-        <Kpi title="Status RAG" value={project?.status ?? '-'} detail="AUTO" icon={<AlertTriangle className="h-5 w-5" />} />
+        <Kpi title="Status RAG" value={scheduleStatus} detail="SPI Macro" icon={<AlertTriangle className="h-5 w-5" />} />
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[320px_1fr]">
@@ -94,7 +96,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="mt-5">
-        <GanttChart tasks={tasks} title="Mini Gantt das fases e entregas" />
+        <GanttChart tasks={dashboardTasks} title="Mini Gantt das fases e entregas" />
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-2">
@@ -134,7 +136,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {projectQuery.isLoading || tasksLoading ? <p className="mt-4 text-sm text-text-muted">Carregando indicadores...</p> : null}
+      {projectQuery.isLoading || scheduleLoading ? <p className="mt-4 text-sm text-text-muted">Carregando indicadores...</p> : null}
     </div>
   )
 }

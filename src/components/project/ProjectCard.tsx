@@ -1,5 +1,8 @@
+import { useMemo } from 'react'
 import { Archive, CalendarClock, ExternalLink, Trash2 } from 'lucide-react'
 import { StatusIcon } from '@/components/ui/AppIcons'
+import { useMacroSchedule } from '@/hooks/useMacroSchedule'
+import { buildScheduleAnalytics, scheduleStatusFromSpi } from '@/lib/scheduleAnalytics'
 import { calcDaysToGoLive, PHASE_LABELS, STATUS_COLORS } from '@/lib/utils'
 import type { Project } from '@/types'
 
@@ -12,7 +15,13 @@ type ProjectCardProps = {
 }
 
 export default function ProjectCard({ project, active, onOpen, onArchive, onTrash }: ProjectCardProps) {
-  const status = STATUS_COLORS[project.status]
+  const { tasks: macroTasks, holidayDates } = useMacroSchedule(project.id)
+  const scheduleReport = useMemo(() => buildScheduleAnalytics(macroTasks, holidayDates), [holidayDates, macroTasks])
+  const hasMacroSchedule = scheduleReport.tasks.length > 0
+  const displaySpi = hasMacroSchedule ? scheduleReport.spi ?? project.spi : project.spi
+  const displayProgress = hasMacroSchedule ? scheduleReport.realPct : project.progress_pct
+  const displayStatus = hasMacroSchedule ? scheduleStatusFromSpi(displaySpi) : project.status
+  const status = STATUS_COLORS[displayStatus]
   const days = calcDaysToGoLive(project.golive_date)
 
   return (
@@ -23,8 +32,8 @@ export default function ProjectCard({ project, active, onOpen, onArchive, onTras
       <div className="flex items-start justify-between gap-3">
         <span className="badge badge-blue">Fase {project.current_phase} {PHASE_LABELS[project.current_phase].short}</span>
         <span className="badge" style={{ background: status.bg, color: status.text }}>
-          <StatusIcon status={project.status} />
-          {project.status}
+          <StatusIcon status={displayStatus} />
+          {displayStatus}
         </span>
       </div>
 
@@ -50,10 +59,10 @@ export default function ProjectCard({ project, active, onOpen, onArchive, onTras
       <div className="mt-4">
         <div className="mb-2 flex items-center justify-between text-xs">
           <span className="font-semibold text-text-secondary">Progresso</span>
-          <span className="text-text-muted">SPI {project.spi.toFixed(2)}</span>
+          <span className="text-text-muted">SPI {displaySpi.toFixed(2)}</span>
         </div>
         <div className="progress-bar">
-          <div className="progress-fill bg-brand-600" style={{ width: `${project.progress_pct}%` }} />
+          <div className="progress-fill bg-brand-600" style={{ width: `${displayProgress}%` }} />
         </div>
       </div>
 
