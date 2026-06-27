@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppIcon, PhaseIcon, StatusIcon } from '@/components/ui/AppIcons'
 import { useMacroSchedule } from '@/hooks/useMacroSchedule'
+import { useScheduleGovernance } from '@/hooks/useScheduleGovernance'
 import { buildScheduleAnalytics, scheduleStatusFromSpi } from '@/lib/scheduleAnalytics'
 import { useProjectStore } from '@/store'
 import { PHASE_INFO } from '@/types'
@@ -15,9 +16,11 @@ export default function PhaseNav() {
 
   const id = projectId ?? activeProject?.id
   const { tasks: macroTasks, holidayDates } = useMacroSchedule(id)
+  const { snapshots } = useScheduleGovernance(id)
   const scheduleReport = useMemo(() => buildScheduleAnalytics(macroTasks, holidayDates), [holidayDates, macroTasks])
+  const latestSnapshot = snapshots[snapshots.length - 1]
   const hasMacroSchedule = scheduleReport.tasks.length > 0
-  const spi = hasMacroSchedule ? scheduleReport.spi ?? 1 : activeProject?.spi ?? 1
+  const spi = latestSnapshot?.spi ?? (hasMacroSchedule ? scheduleReport.spi ?? 1 : activeProject?.spi ?? 1)
   const status: ProjectStatus = hasMacroSchedule ? scheduleStatusFromSpi(spi) : activeProject?.status ?? 'verde'
   const golive = activeProject?.golive_date
   const daysLeft = golive

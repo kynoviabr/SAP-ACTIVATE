@@ -6,6 +6,7 @@ export type TaskStatus    = 'pendente' | 'em_andamento' | 'concluido' | 'atrasad
 export type TaskType      = 'phase' | 'task' | 'milestone'
 export type MacroSchedulePhase = 'Prepare' | 'Explore' | 'Realize' | 'Deploy' | 'Run'
 export type MacroScheduleZoom  = 'day' | 'week' | 'month' | 'quarter'
+export type MacroScheduleBaselineStatus = 'locked' | 'superseded'
 export type IssueStatus   = 'aberta' | 'em_andamento' | 'resolvida' | 'atrasada' | 'cancelada'
 export type IssuePriority = 'baixa' | 'media' | 'alta' | 'critica'
 export type IssueType     = 'tecnica' | 'processo' | 'gestao' | 'cliente' | 'escopo'
@@ -210,9 +211,89 @@ export interface MacroScheduleHoliday extends BaseEntity {
   source: 'manual' | 'br-national' | 'detected'
 }
 
+export interface MacroScheduleBaseline extends BaseEntity {
+  project_id: string
+  version: number
+  name: string
+  baseline_date: string
+  status: MacroScheduleBaselineStatus
+  locked_at: string
+  locked_by?: string
+  notes?: string
+  task_count: number
+  total_weight: number
+}
+
+export interface MacroScheduleBaselineTask {
+  id: string
+  tenant_id: string
+  baseline_id: string
+  project_id: string
+  original_task_id?: string
+  wbs: string
+  title: string
+  phase: MacroSchedulePhase
+  squad?: string
+  responsible?: string
+  allocation_pct: number
+  start_date?: string
+  end_date?: string
+  is_milestone: boolean
+  planned_pct: number
+  real_pct: number
+  predecessors: number[]
+  hours: number
+  level: number
+  sort_order: number
+  notes?: string
+  created_at: string
+}
+
+export interface MacroScheduleSnapshot extends BaseEntity {
+  project_id: string
+  baseline_id?: string
+  status_date: string
+  measured_at: string
+  measured_by?: string
+  notes?: string
+  task_count: number
+  total_weight: number
+  planned_pct: number
+  real_pct: number
+  pv: number
+  ev: number
+  spi?: number | null
+  delayed_count: number
+}
+
+export interface MacroScheduleSnapshotTask {
+  id: string
+  tenant_id: string
+  snapshot_id: string
+  baseline_task_id?: string
+  project_id: string
+  wbs: string
+  title: string
+  planned_pct: number
+  real_pct: number
+  weight: number
+  pv: number
+  ev: number
+  spi?: number | null
+  is_delayed: boolean
+  notes?: string
+  created_at: string
+}
+
 export type CreateMacroScheduleTaskInput = Omit<MacroScheduleTask, 'id'|'tenant_id'|'created_at'|'updated_at'>
 export type UpdateMacroScheduleTaskInput = Partial<CreateMacroScheduleTaskInput>
 export type MacroScheduleHolidayInput = Omit<MacroScheduleHoliday, 'id'|'tenant_id'|'created_at'|'updated_at'>
+export type CreateMacroScheduleBaselineInput = Omit<MacroScheduleBaseline, 'id'|'tenant_id'|'created_at'|'updated_at'>
+export type UpdateMacroScheduleBaselineInput = Partial<CreateMacroScheduleBaselineInput>
+export type CreateMacroScheduleBaselineTaskInput = Omit<MacroScheduleBaselineTask, 'id'|'tenant_id'|'created_at'>
+export type CreateMacroScheduleSnapshotInput = Omit<MacroScheduleSnapshot, 'id'|'tenant_id'|'created_at'|'updated_at'>
+export type UpdateMacroScheduleSnapshotInput = Partial<CreateMacroScheduleSnapshotInput>
+export type CreateMacroScheduleSnapshotTaskInput = Omit<MacroScheduleSnapshotTask, 'id'|'tenant_id'|'created_at'>
 
 // ── Issue ─────────────────────────────────────────────────────
 export interface Issue extends BaseEntity {

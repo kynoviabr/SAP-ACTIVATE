@@ -26,8 +26,10 @@ import {
 } from 'recharts'
 import { useProject } from '@/hooks/useProjects'
 import { useMacroSchedule } from '@/hooks/useMacroSchedule'
+import { useScheduleGovernance } from '@/hooks/useScheduleGovernance'
 import { MACRO_PHASE_COLORS } from '@/lib/macroSchedule'
 import { buildScheduleAnalytics, criticalReason, type CheckpointSummary } from '@/lib/scheduleAnalytics'
+import { snapshotToCurvePoint } from '@/lib/scheduleGovernance'
 import { formatDate } from '@/lib/utils'
 
 type KpiTone = 'blue' | 'green' | 'amber' | 'red'
@@ -37,13 +39,41 @@ export default function ScheduleReportsPage() {
   const navigate = useNavigate()
   const projectQuery = useProject(projectId)
   const { tasks, holidayDates, isLoading, forceSync, lastSyncedAt } = useMacroSchedule(projectId)
+  const { activeBaseline, snapshots, isLoading: governanceLoading } = useScheduleGovernance(projectId)
 
   const report = useMemo(() => buildScheduleAnalytics(tasks, holidayDates), [holidayDates, tasks])
+  const auditCurve = useMemo(() => snapshots.map(snapshotToCurvePoint), [snapshots])
+  const hasAuditSnapshots = auditCurve.length > 0
+  const latestSnapshot = snapshots[snapshots.length - 1]
+  const curveData = hasAuditSnapshots ? auditCurve : report.curve
+  const spiData = hasAuditSnapshots ? auditCurve : report.spiCurve
+  const display = {
+    asOfIso: latestSnapshot?.status_date ?? report.asOfIso,
+    pv: latestSnapshot?.pv ?? report.pv,
+    ev: latestSnapshot?.ev ?? report.ev,
+    sv: latestSnapshot ? latestSnapshot.ev - latestSnapshot.pv : report.sv,
+    plannedPct: latestSnapshot?.planned_pct ?? report.plannedPct,
+    realPct: latestSnapshot?.real_pct ?? report.realPct,
+    spi: latestSnapshot?.spi ?? report.spi,
+    spiText: latestSnapshot ? latestSnapshot.spi?.toFixed(2) ?? '-' : report.spiText,
+    spiStatus: latestSnapshot ? (latestSnapshot.spi === null || latestSnapshot.spi === undefined ? 'Sem PV' : latestSnapshot.spi >= 1 ? 'No prazo' : latestSnapshot.spi >= 0.85 ? 'Atenção' : 'Crítico') : report.spiStatus,
+    spiTone: latestSnapshot ? (latestSnapshot.spi === null || latestSnapshot.spi === undefined ? 'blue' as const : latestSnapshot.spi >= 1 ? 'green' as const : latestSnapshot.spi >= 0.85 ? 'amber' as const : 'red' as const) : report.spiTone,
+    delayedCount: latestSnapshot?.delayed_count ?? report.delayedTasks.length,
+    forecastLabel: report.forecastLabel,
+    forecastDetail: hasAuditSnapshots ? 'Usa último corte salvo' : report.forecastDetail,
+    forecastTone: report.forecastTone,
+    evmBars: [
+      { name: 'BAC', hours: Math.round(latestSnapshot?.total_weight ?? report.totalHours) },
+      { name: 'PV', hours: Math.round(latestSnapshot?.pv ?? report.pv) },
+      { name: 'EV', hours: Math.round(latestSnapshot?.ev ?? report.ev) },
+      { name: 'SV', hours: Math.round(latestSnapshot ? latestSnapshot.ev - latestSnapshot.pv : report.sv) },
+    ],
+  }
   const project = projectQuery.data
 
   function exportCsv() {
     const header = ['Data', 'Planejado %', 'Realizado %', 'PV horas', 'EV horas', 'SPI']
-    const rows = report.curve.map((point) => [
+    const rows = curveData.map((point) => [
       point.date,
       point.planned,
       point.realized,
@@ -70,8 +100,16 @@ export default function ScheduleReportsPage() {
           <p className="text-xs font-bold uppercase tracking-wide text-brand-600">Relatórios operacionais</p>
           <h1 className="mt-1 text-2xl font-bold text-text-primary">Cronograma, SPI e EVM</h1>
           <p className="mt-1 text-sm text-text-secondary">
-            {project?.name ?? 'Projeto'} - análise gerada a partir do Cronograma Macro em {formatDate(report.asOfIso)}.
+            {project?.name ?? 'Projeto'} - análise gerada a partir do Cronograma Macro em {formatDate(display.asOfIso)}.
           </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {activeBaseline ? <span className="badge badge-red">Baseline V{activeBaseline.version}</span> : <span className="badge badge-amber">Sem baseline</span>}
+            {hasAuditSnapshots ? (
+              <span className="badge badge-green">{snapshots.length} medição(ões) auditáveis</span>
+            ) : (
+              <span className="badge badge-amber">Sem snapshots: visão operacional atual</span>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <button className="btn-secondary" type="button" onClick={() => navigate(`/projects/${projectId}/macro-schedule`)}>
@@ -94,18 +132,18 @@ export default function ScheduleReportsPage() {
       </header>
 
       <section className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <Kpi title="SPI" value={report.spiText} detail={report.spiStatus} icon={<Gauge className="h-5 w-5" />} tone={report.spiTone} info="Schedule Performance Index. Mede eficiência do cronograma: EV dividido por PV. Abaixo de 1 indica atraso; acima de 1 indica avanço sobre o planejado." />
-        <Kpi title="PV" value={`${report.pv.toFixed(0)}h`} detail={`${report.plannedPct}% planejado`} icon={<TrendingUp className="h-5 w-5" />} info="Planned Value em horas ponderadas. Usa o peso da tarefa informado em Peso (h)/Horas; se vazio, usa dias úteis x 8. Fórmula: peso x % planejado efetivo." />
-        <Kpi title="EV" value={`${report.ev.toFixed(0)}h`} detail={`${report.realPct}% realizado`} icon={<CheckCircle2 className="h-5 w-5" />} info="Earned Value em horas ponderadas. Usa o mesmo peso da tarefa de PV e multiplica pelo % Real aceito. Fórmula: peso x % Real." />
-        <Kpi title="SV" value={`${report.sv >= 0 ? '+' : ''}${report.sv.toFixed(0)}h`} detail={report.sv >= 0 ? 'Adiantado' : 'Atrasado'} icon={<AlertTriangle className="h-5 w-5" />} tone={report.sv >= 0 ? 'green' : 'red'} info="Schedule Variance. Diferença entre EV e PV. Valor negativo mostra déficit de execução em horas; valor positivo mostra avanço sobre o plano." />
-        <Kpi title="Atrasos" value={String(report.delayedTasks.length)} detail={`${report.overdueTasks.length} vencida(s)`} icon={<AlertTriangle className="h-5 w-5" />} tone={report.delayedTasks.length ? 'red' : 'green'} info="Conta tarefas com % Real abaixo do % Plan. por mais de 5 pontos ou tarefas vencidas pela data final e ainda não concluídas." />
-        <Kpi title="Forecast" value={report.forecastLabel} detail={report.forecastDetail} icon={<CalendarClock className="h-5 w-5" />} tone={report.forecastTone} info="Projeção simples da data final baseada no SPI atual. Quanto menor o SPI, maior a tendência de extensão do prazo planejado." />
+        <Kpi title="SPI" value={display.spiText} detail={display.spiStatus} icon={<Gauge className="h-5 w-5" />} tone={display.spiTone} info="Schedule Performance Index. Em modo auditável, usa EV/PV da última medição de corte salva contra a baseline congelada. Abaixo de 1 indica atraso; acima de 1 indica avanço sobre o planejado." />
+        <Kpi title="PV" value={`${display.pv.toFixed(0)}h`} detail={`${display.plannedPct.toFixed(1)}% planejado`} icon={<TrendingUp className="h-5 w-5" />} info="Planned Value em horas ponderadas. Com baseline, vem do snapshot da data de corte; sem snapshot, é uma visão operacional derivada das datas atuais." />
+        <Kpi title="EV" value={`${display.ev.toFixed(0)}h`} detail={`${display.realPct.toFixed(1)}% realizado`} icon={<CheckCircle2 className="h-5 w-5" />} info="Earned Value em horas ponderadas. Com baseline, usa % Real medido na data de corte e o peso congelado da baseline." />
+        <Kpi title="SV" value={`${display.sv >= 0 ? '+' : ''}${display.sv.toFixed(0)}h`} detail={display.sv >= 0 ? 'Adiantado' : 'Atrasado'} icon={<AlertTriangle className="h-5 w-5" />} tone={display.sv >= 0 ? 'green' : 'red'} info="Schedule Variance. Diferença entre EV e PV na data de corte. Valor negativo mostra déficit de execução em horas." />
+        <Kpi title="Atrasos" value={String(display.delayedCount)} detail={hasAuditSnapshots ? 'no último corte' : `${report.overdueTasks.length} vencida(s)`} icon={<AlertTriangle className="h-5 w-5" />} tone={display.delayedCount ? 'red' : 'green'} info="Com medições salvas, conta tarefas cujo % Real ficou abaixo do planejado no snapshot de corte. Sem snapshot, usa a visão operacional atual." />
+        <Kpi title="Forecast" value={display.forecastLabel} detail={display.forecastDetail} icon={<CalendarClock className="h-5 w-5" />} tone={display.forecastTone} info="Projeção simples da data final baseada no SPI atual. Para auditoria, use como tendência gerencial, não como dado histórico." />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
         <ChartCard title="Planejado x realizado" badge="Linha do tempo">
           <ResponsiveContainer width="100%" height={330}>
-            <ComposedChart data={report.curve} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
+            <ComposedChart data={curveData} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
               <CartesianGrid stroke="#2e3460" strokeDasharray="3 3" />
               <XAxis dataKey="label" stroke="#9ca3af" tick={{ fontSize: 11 }} />
               <YAxis stroke="#9ca3af" tick={{ fontSize: 11 }} domain={[0, 100]} />
@@ -116,9 +154,9 @@ export default function ScheduleReportsPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="SPI operacional" badge={report.spiText}>
+        <ChartCard title={hasAuditSnapshots ? 'SPI por corte salvo' : 'SPI operacional'} badge={display.spiText}>
           <ResponsiveContainer width="100%" height={330}>
-            <AreaChart data={report.spiCurve} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
+            <AreaChart data={spiData} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
               <CartesianGrid stroke="#2e3460" strokeDasharray="3 3" />
               <XAxis dataKey="label" stroke="#9ca3af" tick={{ fontSize: 11 }} />
               <YAxis stroke="#9ca3af" tick={{ fontSize: 11 }} domain={[0, 1.4]} />
@@ -133,7 +171,7 @@ export default function ScheduleReportsPage() {
       <section className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr]">
         <ChartCard title="EVM em horas ponderadas" badge="PV / EV">
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={report.evmBars} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
+            <BarChart data={display.evmBars} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
               <CartesianGrid stroke="#2e3460" strokeDasharray="3 3" />
               <XAxis dataKey="name" stroke="#9ca3af" tick={{ fontSize: 11 }} />
               <YAxis stroke="#9ca3af" tick={{ fontSize: 11 }} />
@@ -271,7 +309,7 @@ export default function ScheduleReportsPage() {
       <footer className="mt-4 flex flex-wrap items-center gap-3 text-xs text-text-muted">
         <span>Última sincronização: {lastSyncedAt ? lastSyncedAt.toLocaleString('pt-BR') : 'local'}</span>
         <span>PV/EV usam Peso (h)/Horas por tarefa; se vazio, fallback = dias úteis x 8. Para EVM monetário completo, preencher BAC/AC no template PMI/EVM.</span>
-        {isLoading || projectQuery.isLoading ? <span>Carregando indicadores...</span> : null}
+        {isLoading || projectQuery.isLoading || governanceLoading ? <span>Carregando indicadores...</span> : null}
       </footer>
     </div>
   )

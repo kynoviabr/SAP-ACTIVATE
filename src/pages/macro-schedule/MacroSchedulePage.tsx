@@ -15,17 +15,21 @@ import {
   Download,
   FileInput,
   Globe2,
+  History,
   Image as ImageIcon,
+  Lock,
   PlusCircle,
   RefreshCcw,
   Save,
   Scissors,
   Sparkles,
   Trash2,
+  Unlock,
   Wrench,
   X,
 } from 'lucide-react'
 import { useMacroSchedule } from '@/hooks/useMacroSchedule'
+import { useScheduleGovernance } from '@/hooks/useScheduleGovernance'
 import {
   MACRO_PHASE_COLORS,
   MACRO_PHASES,
@@ -46,11 +50,19 @@ import {
   sortMacroTasks,
   todayIso,
 } from '@/lib/macroSchedule'
-import type { CreateMacroScheduleTaskInput, MacroSchedulePhase, MacroScheduleTask, MacroScheduleZoom } from '@/types'
+import type {
+  CreateMacroScheduleTaskInput,
+  MacroScheduleBaseline,
+  MacroSchedulePhase,
+  MacroScheduleSnapshot,
+  MacroScheduleTask,
+  MacroScheduleZoom,
+} from '@/types'
 
 type MacroRow = MacroScheduleTask | (CreateMacroScheduleTaskInput & { id: string; tenant_id?: string; created_at?: string; updated_at?: string })
 type Lang = 'pt' | 'en' | 'es' | 'zh'
 type MenuName = 'ai' | 'import' | 'holidays' | null
+type MacroView = 'schedule' | 'timeline' | 'measurements'
 
 const zoomLabels = MACRO_ZOOM_LABELS
 
@@ -75,16 +87,27 @@ export default function MacroSchedulePage() {
     forceSync,
     clearCacheAndSync,
   } = useMacroSchedule(projectId)
+  const {
+    activeBaseline,
+    baselineTasks,
+    snapshots,
+    isSaving: isGovernanceSaving,
+    createBaselineFromTasks,
+    supersedeActiveBaseline,
+    createSnapshotFromRows,
+  } = useScheduleGovernance(projectId)
 
   const [rows, setRows] = useState<MacroRow[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [view, setView] = useState<'schedule' | 'timeline'>('schedule')
+  const [view, setView] = useState<MacroView>('schedule')
   const [zoom, setZoom] = useState<MacroScheduleZoom>('month')
   const [menu, setMenu] = useState<MenuName>(null)
   const [lang, setLang] = useState<Lang>('pt')
   const [message, setMessage] = useState('')
   const [dirty, setDirty] = useState(false)
   const [preserveWbs, setPreserveWbs] = useState(false)
+  const [statusDate, setStatusDate] = useState(todayIso())
+  const baselineLocked = Boolean(activeBaseline)
 
   useEffect(() => {
     if (dirty) return
@@ -126,6 +149,11 @@ export default function MacroSchedulePage() {
   }
 
   function updateRow(rowId: string, input: Partial<MacroRow>) {
+    const onlyActualProgress = Object.keys(input).every((key) => key === 'real_pct')
+    if (baselineLocked && !onlyActualProgress) {
+      setMessage('Baseline bloqueada: desbloqueie para replanejar datas, pesos, estrutura ou % planejado. Com baseline ativa, edite apenas % Real e registre a medição de corte.')
+      return
+    }
     applyRows((current) => current.map((row) => {
       if (row.id !== rowId) return row
       const next = { ...row, ...input }
@@ -136,12 +164,17 @@ export default function MacroSchedulePage() {
   }
 
   function addTask() {
+    if (baselineLocked) {
+      setMessage('Cronograma bloqueado pela baseline. Desbloqueie para adicionar tarefas.')
+      return
+    }
     const last = normalizedRows[normalizedRows.length - 1]
     const task = createEmptyMacroTask(projectId, normalizedRows.length + 1, last?.phase ?? 'Prepare')
     applyRows((current) => [...current, withLocalId(task)])
   }
 
   function insertBelow(index: number) {
+    if (baselineLocked) return setMessage('Cronograma bloqueado pela baseline. Desbloqueie para inserir tarefas.')
     const current = normalizedRows[index]
     const task = withLocalId({
       ...createEmptyMacroTask(projectId, index + 2, current?.phase ?? 'Prepare'),
@@ -151,27 +184,32 @@ export default function MacroSchedulePage() {
   }
 
   function duplicateRow(index: number) {
+    if (baselineLocked) return setMessage('Cronograma bloqueado pela baseline. Desbloqueie para duplicar tarefas.')
     const current = normalizedRows[index]
     if (!current) return
     applyRows((items) => [...items.slice(0, index + 1), { ...current, id: localId(), title: `${current.title} (cópia)` }, ...items.slice(index + 1)])
   }
 
   function removeRow(index: number) {
+    if (baselineLocked) return setMessage('Cronograma bloqueado pela baseline. Desbloqueie para remover tarefas.')
     const removeIds = new Set(getBlock(normalizedRows, index).map((row) => row.id))
     applyRows((items) => items.filter((row) => !removeIds.has(row.id)))
     setSelected((items) => new Set(Array.from(items).filter((id) => !removeIds.has(id))))
   }
 
   function indentRow(index: number) {
+    if (baselineLocked) return setMessage('Cronograma bloqueado pela baseline. Desbloqueie para alterar WBS.')
     if (index <= 0) return
     applyRows((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, level: Math.min(8, row.level + 1) } : row))
   }
 
   function outdentRow(index: number) {
+    if (baselineLocked) return setMessage('Cronograma bloqueado pela baseline. Desbloqueie para alterar WBS.')
     applyRows((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, level: Math.max(1, row.level - 1) } : row))
   }
 
   function moveBlock(index: number, direction: -1 | 1) {
+    if (baselineLocked) return setMessage('Cronograma bloqueado pela baseline. Desbloqueie para mover tarefas.')
     const block = getBlock(normalizedRows, index)
     if (!block.length) return
     const blockIds = new Set(block.map((row) => row.id))
@@ -194,6 +232,7 @@ export default function MacroSchedulePage() {
   }
 
   async function deleteSelected() {
+    if (baselineLocked) return setMessage('Cronograma bloqueado pela baseline. Desbloqueie para apagar tarefas.')
     if (!selected.size) return
     if (!window.confirm(`Remover ${selected.size} tarefa(s) selecionada(s)?`)) return
     applyRows((items) => items.filter((row) => !selected.has(row.id)))
@@ -201,6 +240,7 @@ export default function MacroSchedulePage() {
   }
 
   async function clearAll() {
+    if (baselineLocked) return setMessage('Cronograma bloqueado pela baseline. Desbloqueie para limpar o cronograma.')
     if (!window.confirm('Remover todas as tarefas do cronograma?')) return
     setRows([])
     setSelected(new Set())
@@ -210,6 +250,7 @@ export default function MacroSchedulePage() {
   }
 
   async function applyTemplate() {
+    if (baselineLocked) return setMessage('Cronograma bloqueado pela baseline. Desbloqueie para substituir por template.')
     if (!window.confirm('Aplicar template substitui o cronograma atual. Continuar?')) return
     const seeded = seedMacroScheduleTasks(projectId).map(withLocalId)
     setPreserveWbs(false)
@@ -220,6 +261,7 @@ export default function MacroSchedulePage() {
   }
 
   function validateNames() {
+    if (baselineLocked) return setMessage('Cronograma bloqueado pela baseline. Desbloqueie para validar/substituir nomes.')
     applyRows((items) => items.map((row) => row.responsible?.trim() ? row : { ...row, responsible: row.squad || row.responsible }))
     setMessage('Nomes validados: responsáveis vazios foram preenchidos pela squad.')
   }
@@ -251,6 +293,10 @@ export default function MacroSchedulePage() {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    if (baselineLocked) {
+      setMessage('Cronograma bloqueado pela baseline. Desbloqueie para carregar um novo arquivo.')
+      return
+    }
     if (!window.confirm('A carga substituirá o cronograma atual. Continuar?')) return
     try {
       const XLSX = await import('xlsx')
@@ -277,6 +323,10 @@ export default function MacroSchedulePage() {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    if (baselineLocked) {
+      setMessage('Cronograma bloqueado pela baseline. Desbloqueie para carregar um novo XML.')
+      return
+    }
     if (!window.confirm('A carga substituirá o cronograma atual. Continuar?')) return
     try {
       const imported = parseProjectXml(await file.text(), projectId).map(withLocalId)
@@ -318,12 +368,53 @@ export default function MacroSchedulePage() {
   }
 
   async function recalcWithHolidays() {
+    if (baselineLocked) return setMessage('Cronograma bloqueado pela baseline. Desbloqueie para recalcular pesos/datas.')
     applyRows((items) => items.map((row) => {
       if (row.is_milestone || !row.start_date || !row.end_date) return row
       const days = countBusinessDays(row.start_date, row.end_date, holidayDates)
       return { ...row, hours: Math.max(row.hours || 0, days * 8) }
     }))
     setMessage('Horas recalculadas considerando dias úteis e feriados.')
+  }
+
+  async function lockBaseline() {
+    if (!normalizedRows.length) return setMessage('Crie ou importe tarefas antes de congelar a baseline.')
+    if (!window.confirm('Criar baseline congela datas, pesos, WBS e % planejado para auditoria. Depois disso, apenas % Real deve ser medido até desbloquear/replanejar. Continuar?')) return
+    try {
+      const saved = dirty ? await replaceTasks(normalizedRows, { preserveWbs }) : normalizedRows
+      setRows(saved as MacroRow[])
+      setDirty(false)
+      const result = await createBaselineFromTasks(saved as MacroScheduleTask[], holidayDates, 'Baseline congelada pelo portal.')
+      setMessage(`Baseline V${result.baseline.version} criada e cronograma bloqueado.`)
+    } catch (error) {
+      setMessage(`Falha ao criar baseline: ${(error as Error).message}`)
+    }
+  }
+
+  async function unlockForReplan() {
+    if (!activeBaseline) return
+    if (!window.confirm(`Desbloquear a Baseline V${activeBaseline.version} para replanejamento? Ela ficará marcada como substituída e você poderá criar uma nova baseline depois.`)) return
+    try {
+      await supersedeActiveBaseline()
+      setMessage(`Baseline V${activeBaseline.version} substituída. Cronograma liberado para replanejamento.`)
+    } catch (error) {
+      setMessage(`Falha ao desbloquear: ${(error as Error).message}`)
+    }
+  }
+
+  async function registerMeasurement() {
+    if (!activeBaseline) return setMessage('Crie uma baseline antes de registrar medição de corte.')
+    if (!statusDate) return setMessage('Informe a data de corte.')
+    try {
+      const saved = dirty ? await replaceTasks(normalizedRows, { preserveWbs }) : normalizedRows
+      setRows(saved as MacroRow[])
+      setDirty(false)
+      const result = await createSnapshotFromRows(saved as MacroScheduleTask[], statusDate, holidayDates, `Medição registrada em ${new Date().toLocaleString('pt-BR')}.`)
+      setMessage(`Medição de ${formatBrDate(result.snapshot.status_date)} registrada: planejado ${result.snapshot.planned_pct.toFixed(1)}%, realizado ${result.snapshot.real_pct.toFixed(1)}%, SPI ${result.snapshot.spi?.toFixed(2) ?? '—'}.`)
+      setView('measurements')
+    } catch (error) {
+      setMessage(`Falha ao registrar medição: ${(error as Error).message}`)
+    }
   }
 
   return (
@@ -358,7 +449,7 @@ export default function MacroSchedulePage() {
         <div className="border-b border-surface-border px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2">
-              <button className="btn-primary btn-sm" type="button" onClick={addTask}><PlusCircle className="h-4 w-4" /> Adicionar tarefa</button>
+              <button className="btn-primary btn-sm" type="button" onClick={addTask} disabled={baselineLocked}><PlusCircle className="h-4 w-4" /> Adicionar tarefa</button>
               <button
                 className="btn-secondary btn-sm"
                 type="button"
@@ -370,17 +461,60 @@ export default function MacroSchedulePage() {
               <button className="btn-secondary btn-sm" type="button" onClick={saveNow} disabled={isSaving}>
                 <Save className="h-4 w-4" /> Salvar agora
               </button>
-              <DropdownButton active={menu === 'ai'} onClick={() => setMenu(menu === 'ai' ? null : 'ai')} icon={<Bot className="h-4 w-4" />} label="Recursos IA" />
-              <DropdownButton active={menu === 'import'} onClick={() => setMenu(menu === 'import' ? null : 'import')} icon={<FileInput className="h-4 w-4" />} label="Import/Export de Cronograma" />
+              <DropdownButton active={menu === 'ai'} onClick={() => setMenu(menu === 'ai' ? null : 'ai')} icon={<Bot className="h-4 w-4" />} label="Recursos IA" disabled={baselineLocked} />
+              <DropdownButton active={menu === 'import'} onClick={() => setMenu(menu === 'import' ? null : 'import')} icon={<FileInput className="h-4 w-4" />} label="Import/Export de Cronograma" disabled={baselineLocked} />
               <DropdownButton active={menu === 'holidays'} onClick={() => setMenu(menu === 'holidays' ? null : 'holidays')} icon={<CalendarDays className="h-4 w-4" />} label="Feriados" />
-              <button className="btn-danger btn-sm" type="button" onClick={deleteSelected} disabled={!selected.size}><Trash2 className="h-4 w-4" /> Selecionados</button>
-              <button className="btn-danger btn-sm" type="button" onClick={clearAll}><Trash2 className="h-4 w-4" /> Limpar tudo</button>
+              <button className="btn-danger btn-sm" type="button" onClick={deleteSelected} disabled={!selected.size || baselineLocked}><Trash2 className="h-4 w-4" /> Selecionados</button>
+              <button className="btn-danger btn-sm" type="button" onClick={clearAll} disabled={baselineLocked}><Trash2 className="h-4 w-4" /> Limpar tudo</button>
             </div>
             <div className="flex items-center gap-3 text-sm text-text-secondary">
-              {isSaving || dirty ? <span className="badge badge-blue">Salvando...</span> : <span className="badge badge-green">Sincronizado</span>}
+              {isSaving || dirty || isGovernanceSaving ? <span className="badge badge-blue">Salvando...</span> : <span className="badge badge-green">Sincronizado</span>}
               <span className="font-semibold text-text-primary">{normalizedRows.length} tarefa(s)</span>
             </div>
           </div>
+
+          <section className={`mt-4 rounded-[8px] border px-4 py-3 ${activeBaseline ? 'border-danger/40 bg-danger/10' : 'border-warn/40 bg-warn/10'}`}>
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex items-start gap-3">
+                <span className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-[8px] ${activeBaseline ? 'bg-danger/15 text-danger' : 'bg-warn/15 text-warn'}`}>
+                  {activeBaseline ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                </span>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-sm font-bold text-text-primary">
+                      {activeBaseline ? `Cronograma bloqueado - Baseline V${activeBaseline.version}` : 'Sem baseline auditável'}
+                    </h2>
+                    {activeBaseline ? <span className="badge badge-red">Baseline congelada em {formatBrDate(activeBaseline.baseline_date)}</span> : <span className="badge badge-amber">Crie a baseline antes do primeiro corte</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {activeBaseline
+                      ? 'Datas, WBS, pesos e % planejado estão congelados. Atualize apenas % Real e registre medições por data de corte.'
+                      : 'Para calcular SPI histórico sem inventar dado, congele primeiro o plano aprovado e depois registre medições de corte.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-2 rounded-[8px] border border-surface-border bg-[#0f1229] px-3 py-2 text-xs font-semibold text-text-secondary">
+                  Corte
+                  <input className="input h-8 min-w-[148px]" type="date" value={statusDate} onChange={(event) => setStatusDate(event.target.value)} />
+                </label>
+                {activeBaseline ? (
+                  <>
+                    <button className="btn-primary btn-sm" type="button" onClick={registerMeasurement} disabled={isGovernanceSaving || !baselineTasks.length}>
+                      <History className="h-4 w-4" /> Registrar medição
+                    </button>
+                    <button className="btn-danger btn-sm" type="button" onClick={unlockForReplan} disabled={isGovernanceSaving}>
+                      <Unlock className="h-4 w-4" /> Desbloquear para replanejar
+                    </button>
+                  </>
+                ) : (
+                  <button className="btn-primary btn-sm" type="button" onClick={lockBaseline} disabled={isGovernanceSaving || !normalizedRows.length}>
+                    <Lock className="h-4 w-4" /> Criar baseline e bloquear
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
 
           {menu ? (
             <div className="mt-3 flex flex-wrap gap-2 rounded-[8px] border border-surface-border bg-[#0f1229]/55 p-3">
@@ -420,6 +554,7 @@ export default function MacroSchedulePage() {
           <div className="mt-4 flex flex-wrap gap-2">
             <button className={`section-tab ${view === 'schedule' ? 'active' : ''}`} type="button" onClick={() => setView('schedule')}>Cronograma</button>
             <button className={`section-tab ${view === 'timeline' ? 'active' : ''}`} type="button" onClick={() => setView('timeline')}>Timeline</button>
+            <button className={`section-tab ${view === 'measurements' ? 'active' : ''}`} type="button" onClick={() => setView('measurements')}>Medições</button>
             <button className="btn-secondary btn-sm" type="button" onClick={() => navigate(`/projects/${projectId}/schedule-reports`)}>
               <BarChart3 className="h-4 w-4" />
               Relatório
@@ -443,9 +578,12 @@ export default function MacroSchedulePage() {
               onInsert={insertBelow}
               onDuplicate={duplicateRow}
               onRemove={removeRow}
+              locked={baselineLocked}
             />
-          ) : (
+          ) : view === 'timeline' ? (
             <Timeline rows={normalizedRows} holidays={holidayDates} zoom={zoom} onZoom={setZoom} />
+          ) : (
+            <MeasurementsPanel activeBaseline={activeBaseline} snapshots={snapshots} onRegister={registerMeasurement} isSaving={isGovernanceSaving} />
           )}
         </div>
 
@@ -459,10 +597,11 @@ export default function MacroSchedulePage() {
   )
 }
 
-function ScheduleTable({ rows, selected, holidays, onSelect, onChange, onIndent, onOutdent, onMove, onInsert, onDuplicate, onRemove }: {
+function ScheduleTable({ rows, selected, holidays, locked, onSelect, onChange, onIndent, onOutdent, onMove, onInsert, onDuplicate, onRemove }: {
   rows: MacroRow[]
   selected: Set<string>
   holidays: string[]
+  locked: boolean
   onSelect: (id: string) => void
   onChange: (id: string, input: Partial<MacroRow>) => void
   onIndent: (index: number) => void
@@ -511,24 +650,25 @@ function ScheduleTable({ rows, selected, holidays, onSelect, onChange, onIndent,
                 <td style={{ paddingLeft: `${Math.max(0, row.level - 1) * 14}px` }}>
                   <div className="flex items-center gap-2">
                     {milestone ? <Diamond className="h-3.5 w-3.5 fill-warn text-warn" /> : null}
-                    <input className="input min-w-[280px]" value={row.title} onChange={(event) => onChange(row.id, { title: event.target.value })} />
+                    <input className="input min-w-[280px]" value={row.title} disabled={locked} onChange={(event) => onChange(row.id, { title: event.target.value })} />
                   </div>
                 </td>
                 <td>
-                  <select className="input min-w-[110px]" value={row.phase} onChange={(event) => onChange(row.id, { phase: event.target.value as MacroSchedulePhase })}>
+                  <select className="input min-w-[110px]" value={row.phase} disabled={locked} onChange={(event) => onChange(row.id, { phase: event.target.value as MacroSchedulePhase })}>
                     {MACRO_PHASES.map((phase) => <option key={phase} value={phase}>{phase}</option>)}
                   </select>
                 </td>
-                <td><input className="input min-w-[120px]" value={row.squad ?? ''} onChange={(event) => onChange(row.id, { squad: event.target.value })} /></td>
-                <td><input className="input min-w-[150px]" value={row.responsible ?? ''} onChange={(event) => onChange(row.id, { responsible: event.target.value })} /></td>
-                <td><NumberCell value={row.allocation_pct} onChange={(allocation_pct) => onChange(row.id, { allocation_pct })} /></td>
-                <td><input className="input min-w-[138px]" type="date" value={row.start_date ?? ''} onChange={(event) => onChange(row.id, { start_date: event.target.value })} /></td>
+                <td><input className="input min-w-[120px]" value={row.squad ?? ''} disabled={locked} onChange={(event) => onChange(row.id, { squad: event.target.value })} /></td>
+                <td><input className="input min-w-[150px]" value={row.responsible ?? ''} disabled={locked} onChange={(event) => onChange(row.id, { responsible: event.target.value })} /></td>
+                <td><NumberCell value={row.allocation_pct} disabled={locked} onChange={(allocation_pct) => onChange(row.id, { allocation_pct })} /></td>
+                <td><input className="input min-w-[138px]" type="date" value={row.start_date ?? ''} disabled={locked} onChange={(event) => onChange(row.id, { start_date: event.target.value })} /></td>
                 <td>
                   <input
                     className="input min-w-[138px]"
                     type="date"
                     title={milestone ? 'Marcos têm fim = início (zero duração)' : undefined}
                     value={row.end_date ?? ''}
+                    disabled={locked}
                     onChange={(event) => onChange(row.id, { end_date: event.target.value })}
                   />
                 </td>
@@ -536,7 +676,7 @@ function ScheduleTable({ rows, selected, holidays, onSelect, onChange, onIndent,
                 <td><NumberCell value={row.real_pct} onChange={(real_pct) => onChange(row.id, { real_pct })} /></td>
                 <td>
                   <div className="flex flex-col gap-1">
-                    <NumberCell value={row.planned_pct} onChange={(planned_pct) => onChange(row.id, { planned_pct })} />
+                    <NumberCell value={row.planned_pct} disabled={locked} onChange={(planned_pct) => onChange(row.id, { planned_pct })} />
                     {!row.planned_pct && effectivePlan > 0 ? (
                       <span className="text-[10px] font-semibold text-brand-600" title="Calculado automaticamente por datas úteis até hoje.">
                         auto {effectivePlan}%
@@ -545,18 +685,18 @@ function ScheduleTable({ rows, selected, holidays, onSelect, onChange, onIndent,
                   </div>
                 </td>
                 <td><span className={spiClass(calcLineSPI(row.real_pct, effectivePlan))}>{formatSPI(row.real_pct, effectivePlan)}</span></td>
-                <td><input className="input min-w-[100px]" placeholder="ex: 5, 12" value={row.predecessors.join(', ')} onChange={(event) => onChange(row.id, { predecessors: parsePredecessors(event.target.value) })} /></td>
-                <td><NumberCell max={99999} value={row.hours} onChange={(hours) => onChange(row.id, { hours })} /></td>
+                <td><input className="input min-w-[100px]" placeholder="ex: 5, 12" value={row.predecessors.join(', ')} disabled={locked} onChange={(event) => onChange(row.id, { predecessors: parsePredecessors(event.target.value) })} /></td>
+                <td><NumberCell max={99999} value={row.hours} disabled={locked} onChange={(hours) => onChange(row.id, { hours })} /></td>
                 <td>
                   <div className="flex gap-1">
-                    <IconAction label="Desindentar" onClick={() => onOutdent(index)}><ArrowLeft /></IconAction>
-                    <IconAction label="Indentar" onClick={() => onIndent(index)}><ArrowRight /></IconAction>
-                    <IconAction label="Mover para cima" onClick={() => onMove(index, -1)}><ArrowUp /></IconAction>
-                    <IconAction label="Mover para baixo" onClick={() => onMove(index, 1)}><ArrowDown /></IconAction>
-                    <IconAction label="Inserir nova linha" onClick={() => onInsert(index)}><PlusCircle /></IconAction>
-                    <IconAction label="Marco/Milestone" onClick={() => onChange(row.id, { is_milestone: !row.is_milestone, end_date: row.start_date ?? row.end_date })}><Diamond /></IconAction>
-                    <IconAction label="Duplicar tarefa" onClick={() => onDuplicate(index)}><Copy /></IconAction>
-                    <IconAction label="Remover tarefa" danger onClick={() => onRemove(index)}><X /></IconAction>
+                    <IconAction label="Desindentar" disabled={locked} onClick={() => onOutdent(index)}><ArrowLeft /></IconAction>
+                    <IconAction label="Indentar" disabled={locked} onClick={() => onIndent(index)}><ArrowRight /></IconAction>
+                    <IconAction label="Mover para cima" disabled={locked} onClick={() => onMove(index, -1)}><ArrowUp /></IconAction>
+                    <IconAction label="Mover para baixo" disabled={locked} onClick={() => onMove(index, 1)}><ArrowDown /></IconAction>
+                    <IconAction label="Inserir nova linha" disabled={locked} onClick={() => onInsert(index)}><PlusCircle /></IconAction>
+                    <IconAction label="Marco/Milestone" disabled={locked} onClick={() => onChange(row.id, { is_milestone: !row.is_milestone, end_date: row.start_date ?? row.end_date })}><Diamond /></IconAction>
+                    <IconAction label="Duplicar tarefa" disabled={locked} onClick={() => onDuplicate(index)}><Copy /></IconAction>
+                    <IconAction label="Remover tarefa" disabled={locked} danger onClick={() => onRemove(index)}><X /></IconAction>
                   </div>
                 </td>
               </tr>
@@ -631,6 +771,97 @@ function Timeline({ rows, holidays, zoom, onZoom }: { rows: MacroRow[]; holidays
   )
 }
 
+function MeasurementsPanel({
+  activeBaseline,
+  snapshots,
+  isSaving,
+  onRegister,
+}: {
+  activeBaseline: MacroScheduleBaseline | null
+  snapshots: MacroScheduleSnapshot[]
+  isSaving: boolean
+  onRegister: () => void
+}) {
+  const latest = snapshots[snapshots.length - 1]
+  return (
+    <section className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-4">
+        <article className="card2">
+          <p className="text-xs font-bold uppercase tracking-wide text-text-muted">Baseline</p>
+          <strong className="mt-2 block text-2xl text-text-primary">{activeBaseline ? `V${activeBaseline.version}` : '—'}</strong>
+          <span className="mt-2 block text-xs text-text-secondary">{activeBaseline ? `${activeBaseline.task_count} tarefas · ${activeBaseline.total_weight.toFixed(0)}h peso` : 'Crie uma baseline para medir.'}</span>
+        </article>
+        <article className="card2">
+          <p className="text-xs font-bold uppercase tracking-wide text-text-muted">Último corte</p>
+          <strong className="mt-2 block text-2xl text-text-primary">{latest ? formatBrDate(latest.status_date) : '—'}</strong>
+          <span className="mt-2 block text-xs text-text-secondary">{snapshots.length} medição(ões) salvas</span>
+        </article>
+        <article className="card2">
+          <p className="text-xs font-bold uppercase tracking-wide text-text-muted">Plan x Real</p>
+          <strong className="mt-2 block text-2xl text-text-primary">{latest ? `${latest.planned_pct.toFixed(1)}% / ${latest.real_pct.toFixed(1)}%` : '—'}</strong>
+          <span className="mt-2 block text-xs text-text-secondary">Percentuais ponderados pelo peso da baseline.</span>
+        </article>
+        <article className="card2">
+          <p className="text-xs font-bold uppercase tracking-wide text-text-muted">SPI do corte</p>
+          <strong className={latest?.spi && latest.spi < 1 ? 'mt-2 block text-2xl text-danger' : 'mt-2 block text-2xl text-success'}>
+            {latest?.spi ? latest.spi.toFixed(2) : '—'}
+          </strong>
+          <span className="mt-2 block text-xs text-text-secondary">{latest ? `${latest.delayed_count} tarefa(s) abaixo do plano` : 'Sem corte registrado.'}</span>
+        </article>
+      </div>
+
+      <section className="card overflow-hidden p-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border p-5">
+          <div>
+            <h2 className="text-lg font-bold text-text-primary">Histórico de medições de corte</h2>
+            <p className="mt-1 text-xs text-text-muted">Cada linha é um snapshot salvo. O relatório deve usar estes pontos para Curva-S e SPI histórico.</p>
+          </div>
+          <button className="btn-primary btn-sm" type="button" disabled={!activeBaseline || isSaving} onClick={onRegister}>
+            <History className="h-4 w-4" /> Registrar corte atual
+          </button>
+        </div>
+        <div className="overflow-auto">
+          <table className="data-table min-w-[900px]">
+            <thead>
+              <tr>
+                <th>Data de corte</th>
+                <th>Baseline</th>
+                <th>Planejado</th>
+                <th>Realizado</th>
+                <th>PV</th>
+                <th>EV</th>
+                <th>SPI</th>
+                <th>Abaixo do plano</th>
+                <th>Registrado em</th>
+              </tr>
+            </thead>
+            <tbody>
+              {snapshots.map((snapshot) => (
+                <tr key={snapshot.id}>
+                  <td className="font-semibold text-text-primary">{formatBrDate(snapshot.status_date)}</td>
+                  <td>{activeBaseline && snapshot.baseline_id === activeBaseline.id ? `V${activeBaseline.version}` : snapshot.baseline_id ? 'Histórica' : '—'}</td>
+                  <td>{snapshot.planned_pct.toFixed(1)}%</td>
+                  <td>{snapshot.real_pct.toFixed(1)}%</td>
+                  <td>{snapshot.pv.toFixed(1)}h</td>
+                  <td>{snapshot.ev.toFixed(1)}h</td>
+                  <td><span className={snapshot.spi && snapshot.spi < 1 ? 'font-semibold text-danger' : 'font-semibold text-success'}>{snapshot.spi ? snapshot.spi.toFixed(2) : '—'}</span></td>
+                  <td>{snapshot.delayed_count}</td>
+                  <td>{new Date(snapshot.measured_at).toLocaleString('pt-BR')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!snapshots.length ? (
+            <div className="p-8 text-sm text-text-secondary">
+              Nenhuma medição salva ainda. Selecione uma data de corte, atualize o % Real na aba Cronograma e registre a medição.
+            </div>
+          ) : null}
+        </div>
+      </section>
+    </section>
+  )
+}
+
 function TimelineBackground({ range, holidays }: { range: { start: Date; end: Date }; holidays: string[] }) {
   const overlays = []
   const totalMs = Math.max(1, range.end.getTime() - range.start.getTime())
@@ -647,12 +878,12 @@ function TimelineBackground({ range, holidays }: { range: { start: Date; end: Da
   return <>{overlays}</>
 }
 
-function NumberCell({ value, onChange, max = 100 }: { value: number; max?: number; onChange: (value: number) => void }) {
-  return <input className="input w-20" type="number" min={0} max={max} value={value} onChange={(event) => onChange(clampNumber(event.target.value, 0, max))} />
+function NumberCell({ value, onChange, max = 100, disabled = false }: { value: number; max?: number; disabled?: boolean; onChange: (value: number) => void }) {
+  return <input className="input w-20" type="number" min={0} max={max} value={value} disabled={disabled} onChange={(event) => onChange(clampNumber(event.target.value, 0, max))} />
 }
 
-function DropdownButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
-  return <button className={`btn-secondary btn-sm ${active ? 'border-brand-600' : ''}`} type="button" onClick={onClick}>{icon}{label}<ChevronDown className="h-3.5 w-3.5" /></button>
+function DropdownButton({ active, icon, label, disabled = false, onClick }: { active: boolean; icon: React.ReactNode; label: string; disabled?: boolean; onClick: () => void }) {
+  return <button className={`btn-secondary btn-sm ${active ? 'border-brand-600' : ''}`} type="button" disabled={disabled} onClick={onClick}>{icon}{label}<ChevronDown className="h-3.5 w-3.5" /></button>
 }
 
 function MenuAction({ icon, label, text, onClick }: { icon: React.ReactNode; label: string; text: string; onClick: () => void }) {
@@ -667,9 +898,9 @@ function MenuAction({ icon, label, text, onClick }: { icon: React.ReactNode; lab
   )
 }
 
-function IconAction({ children, label, danger, onClick }: { children: React.ReactElement; label: string; danger?: boolean; onClick: () => void }) {
+function IconAction({ children, label, danger, disabled = false, onClick }: { children: React.ReactElement; label: string; danger?: boolean; disabled?: boolean; onClick: () => void }) {
   return (
-    <button className={`inline-flex h-8 w-8 items-center justify-center rounded-[8px] border ${danger ? 'border-danger/40 text-danger' : 'border-surface-border text-text-secondary'} bg-[#0f1229] hover:border-brand-600 hover:text-text-primary`} type="button" title={label} onClick={onClick}>
+    <button className={`inline-flex h-8 w-8 items-center justify-center rounded-[8px] border ${danger ? 'border-danger/40 text-danger' : 'border-surface-border text-text-secondary'} bg-[#0f1229] hover:border-brand-600 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40`} type="button" title={label} disabled={disabled} onClick={onClick}>
       {cloneElement(children, { className: 'h-3.5 w-3.5' })}
     </button>
   )
@@ -1196,6 +1427,11 @@ function downloadText(filename: string, content: string, type: string) {
   anchor.click()
   anchor.remove()
   URL.revokeObjectURL(url)
+}
+
+function formatBrDate(value?: string) {
+  if (!value) return '—'
+  return new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR')
 }
 
 function localId() {

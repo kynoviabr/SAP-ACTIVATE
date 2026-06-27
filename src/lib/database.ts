@@ -7,6 +7,10 @@ import type {
   Task, CreateTaskInput, UpdateTaskInput,
   MacroScheduleTask, CreateMacroScheduleTaskInput, UpdateMacroScheduleTaskInput,
   MacroScheduleHoliday, MacroScheduleHolidayInput,
+  MacroScheduleBaseline, CreateMacroScheduleBaselineInput, UpdateMacroScheduleBaselineInput,
+  MacroScheduleBaselineTask, CreateMacroScheduleBaselineTaskInput,
+  MacroScheduleSnapshot, CreateMacroScheduleSnapshotInput,
+  MacroScheduleSnapshotTask, CreateMacroScheduleSnapshotTaskInput,
   ProjectMember, Kickoff, ActivityLog,
   PhaseNumber, QGAnswerType,
   ProjectMemberInput,
@@ -175,6 +179,47 @@ export const macroScheduleDB = {
   ),
   deleteHolidays: (projectId: string) => q<null>(() =>
     supabase.from('macro_schedule_holidays').delete().eq('project_id', projectId)
+  ),
+}
+
+export const macroScheduleGovernanceDB = {
+  listBaselines: (projectId: string) => q<MacroScheduleBaseline[]>(() =>
+    supabase.from('macro_schedule_baselines').select('*').eq('project_id', projectId).order('version', { ascending: false })
+  ),
+  createBaseline: (input: CreateMacroScheduleBaselineInput) => q<MacroScheduleBaseline>(() =>
+    supabase.from('macro_schedule_baselines').insert(input).select().single()
+  ),
+  updateBaseline: (id: string, input: UpdateMacroScheduleBaselineInput) => q<MacroScheduleBaseline>(() =>
+    supabase.from('macro_schedule_baselines').update(input).eq('id', id).select().single()
+  ),
+  supersedeLockedBaselines: (projectId: string) => q<MacroScheduleBaseline[]>(() =>
+    supabase
+      .from('macro_schedule_baselines')
+      .update({ status: 'superseded' })
+      .eq('project_id', projectId)
+      .eq('status', 'locked')
+      .select()
+  ),
+  listBaselineTasks: (baselineId: string) => q<MacroScheduleBaselineTask[]>(() =>
+    supabase.from('macro_schedule_baseline_tasks').select('*').eq('baseline_id', baselineId).order('sort_order')
+  ),
+  bulkInsertBaselineTasks: (tasks: CreateMacroScheduleBaselineTaskInput[]) => q<MacroScheduleBaselineTask[]>(() =>
+    supabase.from('macro_schedule_baseline_tasks').insert(tasks).select()
+  ),
+  listSnapshots: (projectId: string) => q<MacroScheduleSnapshot[]>(() =>
+    supabase.from('macro_schedule_snapshots').select('*').eq('project_id', projectId).order('status_date', { ascending: true })
+  ),
+  createSnapshot: (input: CreateMacroScheduleSnapshotInput) => q<MacroScheduleSnapshot>(() =>
+    supabase.from('macro_schedule_snapshots').upsert(input, { onConflict: 'project_id,status_date' }).select().single()
+  ),
+  deleteSnapshotTasks: (snapshotId: string) => q<null>(() =>
+    supabase.from('macro_schedule_snapshot_tasks').delete().eq('snapshot_id', snapshotId)
+  ),
+  bulkInsertSnapshotTasks: (tasks: CreateMacroScheduleSnapshotTaskInput[]) => q<MacroScheduleSnapshotTask[]>(() =>
+    supabase.from('macro_schedule_snapshot_tasks').insert(tasks).select()
+  ),
+  listSnapshotTasks: (snapshotId: string) => q<MacroScheduleSnapshotTask[]>(() =>
+    supabase.from('macro_schedule_snapshot_tasks').select('*').eq('snapshot_id', snapshotId).order('wbs')
   ),
 }
 

@@ -10,12 +10,14 @@ import { activityDB, risksDB } from '@/lib/database'
 import { buildScheduleAnalytics, macroTasksToDashboardTasks, scheduleStatusFromSpi } from '@/lib/scheduleAnalytics'
 import { calcDaysToGoLive, formatDate, PHASE_LABELS } from '@/lib/utils'
 import { useMacroSchedule } from '@/hooks/useMacroSchedule'
+import { useScheduleGovernance } from '@/hooks/useScheduleGovernance'
 import { useProject } from '@/hooks/useProjects'
 
 export default function DashboardPage() {
   const { projectId } = useParams()
   const projectQuery = useProject(projectId)
   const { tasks: macroTasks, holidayDates, isLoading: scheduleLoading, forceSync } = useMacroSchedule(projectId)
+  const { snapshots, isLoading: governanceLoading } = useScheduleGovernance(projectId)
 
   const risksQuery = useQuery({
     queryKey: ['critical-risks', projectId],
@@ -48,10 +50,12 @@ export default function DashboardPage() {
   const completedTemplates = phaseItems.reduce((sum, item) => sum + (item.completed ?? 0), 0)
   const totalTemplates = phaseItems.reduce((sum, item) => sum + (item.total ?? 0), 0)
   const daysToGoLive = calcDaysToGoLive(project?.golive_date)
-  const spi = scheduleReport.spi ?? project?.spi ?? 1
+  const latestSnapshot = snapshots[snapshots.length - 1]
+  const spi = latestSnapshot?.spi ?? scheduleReport.spi ?? project?.spi ?? 1
   const scheduleStatus = scheduleReport.tasks.length
     ? scheduleStatusFromSpi(spi)
     : project?.status ?? '-'
+  const progressDetail = latestSnapshot ? `Corte ${formatDate(latestSnapshot.status_date)}` : 'Cronograma Macro'
 
   function refreshAll() {
     projectQuery.refetch()
@@ -84,7 +88,7 @@ export default function DashboardPage() {
       </header>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Kpi title="Tarefas concluídas" value={`${completedTemplates}/${totalTemplates}`} detail="Cronograma Macro" icon={<CheckCircle2 className="h-5 w-5" />} />
+        <Kpi title="Tarefas concluídas" value={`${completedTemplates}/${totalTemplates}`} detail={progressDetail} icon={<CheckCircle2 className="h-5 w-5" />} />
         <Kpi title="Fase atual" value={project ? PHASE_LABELS[project.current_phase].short : '-'} detail="AUTO" icon={<Target className="h-5 w-5" />} />
         <Kpi title="Dias Go-Live" value={daysToGoLive || '-'} detail={formatDate(project?.golive_date)} icon={<CalendarDays className="h-5 w-5" />} />
         <Kpi title="Status RAG" value={scheduleStatus} detail="SPI Macro" icon={<AlertTriangle className="h-5 w-5" />} />
@@ -136,7 +140,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {projectQuery.isLoading || scheduleLoading ? <p className="mt-4 text-sm text-text-muted">Carregando indicadores...</p> : null}
+      {projectQuery.isLoading || scheduleLoading || governanceLoading ? <p className="mt-4 text-sm text-text-muted">Carregando indicadores...</p> : null}
     </div>
   )
 }

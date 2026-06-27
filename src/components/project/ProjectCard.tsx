@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Archive, CalendarClock, ExternalLink, Trash2 } from 'lucide-react'
 import { StatusIcon } from '@/components/ui/AppIcons'
 import { useMacroSchedule } from '@/hooks/useMacroSchedule'
+import { useScheduleGovernance } from '@/hooks/useScheduleGovernance'
 import { buildScheduleAnalytics, scheduleStatusFromSpi } from '@/lib/scheduleAnalytics'
 import { calcDaysToGoLive, PHASE_LABELS, STATUS_COLORS } from '@/lib/utils'
 import type { Project } from '@/types'
@@ -16,10 +17,12 @@ type ProjectCardProps = {
 
 export default function ProjectCard({ project, active, onOpen, onArchive, onTrash }: ProjectCardProps) {
   const { tasks: macroTasks, holidayDates } = useMacroSchedule(project.id)
+  const { snapshots } = useScheduleGovernance(project.id)
   const scheduleReport = useMemo(() => buildScheduleAnalytics(macroTasks, holidayDates), [holidayDates, macroTasks])
+  const latestSnapshot = snapshots[snapshots.length - 1]
   const hasMacroSchedule = scheduleReport.tasks.length > 0
-  const displaySpi = hasMacroSchedule ? scheduleReport.spi ?? project.spi : project.spi
-  const displayProgress = hasMacroSchedule ? scheduleReport.realPct : project.progress_pct
+  const displaySpi = latestSnapshot?.spi ?? (hasMacroSchedule ? scheduleReport.spi ?? project.spi : project.spi)
+  const displayProgress = latestSnapshot?.real_pct ?? (hasMacroSchedule ? scheduleReport.realPct : project.progress_pct)
   const displayStatus = hasMacroSchedule ? scheduleStatusFromSpi(displaySpi) : project.status
   const status = STATUS_COLORS[displayStatus]
   const days = calcDaysToGoLive(project.golive_date)
