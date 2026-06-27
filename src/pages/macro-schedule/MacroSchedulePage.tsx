@@ -276,6 +276,16 @@ export default function MacroSchedulePage() {
     }
   }
 
+  async function saveNow() {
+    try {
+      await replaceTasks(rows, { preserveWbs })
+      setDirty(false)
+      setMessage('Cronograma salvo agora.')
+    } catch (error) {
+      setMessage(`Falha ao salvar: ${(error as Error).message}`)
+    }
+  }
+
   async function addHolidays2026And2027() {
     await addNationalHolidays([2026, 2027])
     setMessage('Feriados nacionais 2026/2027 adicionados.')
@@ -340,6 +350,9 @@ export default function MacroSchedulePage() {
                 onClick={() => applyRows((items) => items)}
               >
                 <RefreshCcw className="h-4 w-4" /> Atualizar
+              </button>
+              <button className="btn-secondary btn-sm" type="button" onClick={saveNow} disabled={isSaving}>
+                <Save className="h-4 w-4" /> Salvar agora
               </button>
               <DropdownButton active={menu === 'ai'} onClick={() => setMenu(menu === 'ai' ? null : 'ai')} icon={<Bot className="h-4 w-4" />} label="Recursos IA" />
               <DropdownButton active={menu === 'import'} onClick={() => setMenu(menu === 'import' ? null : 'import')} icon={<FileInput className="h-4 w-4" />} label="Import/Export de Cronograma" />

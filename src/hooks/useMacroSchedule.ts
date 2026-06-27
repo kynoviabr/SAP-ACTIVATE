@@ -31,6 +31,40 @@ function hydrateDemoHoliday(input: MacroScheduleHolidayInput, index: number): Ma
   }
 }
 
+function demoTasksKey(projectId: string) {
+  return `kynovia:macro-schedule:${projectId}:tasks`
+}
+
+function demoHolidaysKey(projectId: string) {
+  return `kynovia:macro-schedule:${projectId}:holidays`
+}
+
+function readLocalItems<T>(key: string): T[] | null {
+  try {
+    const raw = window.localStorage.getItem(key)
+    return raw ? JSON.parse(raw) as T[] : null
+  } catch {
+    return null
+  }
+}
+
+function writeLocalItems<T>(key: string, items: T[]) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(items))
+  } catch {
+    // Local persistence is best-effort for demo/offline mode.
+  }
+}
+
+function loadDemoTasks(projectId: string) {
+  const stored = readLocalItems<MacroScheduleTask>(demoTasksKey(projectId))
+  return stored?.length ? stored : seedMacroScheduleTasks(projectId).map(hydrateDemoTask)
+}
+
+function loadDemoHolidays(projectId: string) {
+  return readLocalItems<MacroScheduleHoliday>(demoHolidaysKey(projectId)) ?? []
+}
+
 export function useMacroSchedule(projectId?: string) {
   const qc = useQueryClient()
   const user = useAuthStore((s) => s.user)
@@ -39,16 +73,16 @@ export function useMacroSchedule(projectId?: string) {
   const isDemo = user?.id === 'demo-user'
   const hasSupabaseEnv = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY)
   const realDbEnabled = Boolean(id && hasSupabaseEnv && !isDemo)
+  const localMode = !realDbEnabled
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
-  const [demoTasks, setDemoTasks] = useState<MacroScheduleTask[]>(() =>
-    seedMacroScheduleTasks(id ?? 'demo-project').map(hydrateDemoTask)
-  )
-  const [demoHolidays, setDemoHolidays] = useState<MacroScheduleHoliday[]>([])
+  const [demoTasks, setDemoTasks] = useState<MacroScheduleTask[]>(() => loadDemoTasks(id ?? 'demo-project'))
+  const [demoHolidays, setDemoHolidays] = useState<MacroScheduleHoliday[]>(() => loadDemoHolidays(id ?? 'demo-project'))
 
   useEffect(() => {
-    if (!isDemo || !id) return
-    setDemoTasks(seedMacroScheduleTasks(id).map(hydrateDemoTask))
-  }, [id, isDemo])
+    if (!localMode || !id) return
+    setDemoTasks(loadDemoTasks(id))
+    setDemoHolidays(loadDemoHolidays(id))
+  }, [id, localMode])
 
   const tasksQuery = useQuery({
     queryKey: ['macro-schedule', id, 'tasks'],
@@ -71,13 +105,13 @@ export function useMacroSchedule(projectId?: string) {
   }, [tasksQuery.dataUpdatedAt])
 
   const tasks = useMemo(
-    () => sortMacroTasks(tasksQuery.data ?? (isDemo ? demoTasks : [])),
-    [demoTasks, isDemo, tasksQuery.data]
+    () => sortMacroTasks(tasksQuery.data ?? (localMode ? demoTasks : [])),
+    [demoTasks, localMode, tasksQuery.data]
   )
 
   const holidays = useMemo(
-    () => holidaysQuery.data ?? (isDemo ? demoHolidays : []),
-    [demoHolidays, holidaysQuery.data, isDemo]
+    () => holidaysQuery.data ?? (localMode ? demoHolidays : []),
+    [demoHolidays, holidaysQuery.data, localMode]
   )
 
   const replaceMutation = useMutation({
@@ -110,8 +144,10 @@ export function useMacroSchedule(projectId?: string) {
   async function replaceTasks(nextTasks: (MacroScheduleTask | CreateMacroScheduleTaskInput)[], options: { preserveWbs?: boolean } = {}) {
     if (!id) return
     const normalized = normalizeMacroTasksForSave(id, nextTasks, options)
-    if (isDemo || !realDbEnabled) {
-      setDemoTasks(normalized.map(hydrateDemoTask))
+    if (localMode) {
+      const hydrated = normalized.map(hydrateDemoTask)
+      setDemoTasks(hydrated)
+      writeLocalItems(demoTasksKey(id), hydrated)
       setLastSyncedAt(new Date())
       return
     }
@@ -126,8 +162,10 @@ export function useMacroSchedule(projectId?: string) {
   async function addNationalHolidays(years = [2026, 2027]) {
     if (!id) return
     const items = years.flatMap((year) => getBrazilNationalHolidays(year, id))
-    if (isDemo || !realDbEnabled) {
-      setDemoHolidays(items.map(hydrateDemoHoliday))
+    if (localMode) {
+      const hydrated = items.map(hydrateDemoHoliday)
+      setDemoHolidays(hydrated)
+      writeLocalItems(demoHolidaysKey(id), hydrated)
       return
     }
     await holidaysMutation.mutateAsync(items)
@@ -136,23 +174,26 @@ export function useMacroSchedule(projectId?: string) {
   async function detectAndAddHolidays() {
     if (!id) return
     const items = getHolidaysForTaskRange(id, tasks)
-    if (isDemo || !realDbEnabled) {
-      setDemoHolidays(items.map(hydrateDemoHoliday))
+    if (localMode) {
+      const hydrated = items.map(hydrateDemoHoliday)
+      setDemoHolidays(hydrated)
+      writeLocalItems(demoHolidaysKey(id), hydrated)
       return
     }
     await holidaysMutation.mutateAsync(items)
   }
 
   async function clearHolidays() {
-    if (isDemo || !realDbEnabled) {
+    if (localMode) {
       setDemoHolidays([])
+      if (id) writeLocalItems(demoHolidaysKey(id), [])
       return
     }
     await clearHolidaysMutation.mutateAsync()
   }
 
   async function forceSync() {
-    if (!realDbEnabled) {
+    if (localMode) {
       setLastSyncedAt(new Date())
       return
     }
