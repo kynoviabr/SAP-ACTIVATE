@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Download,
   Gauge,
+  HelpCircle,
   Milestone,
   RefreshCw,
   TrendingUp,
@@ -137,12 +138,12 @@ export default function ScheduleReportsPage() {
       </header>
 
       <section className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <Kpi title="SPI" value={report.spiText} detail={report.spiStatus} icon={<Gauge className="h-5 w-5" />} tone={report.spiTone} />
-        <Kpi title="PV" value={`${report.pv.toFixed(0)}h`} detail={`${report.plannedPct}% planejado`} icon={<TrendingUp className="h-5 w-5" />} />
-        <Kpi title="EV" value={`${report.ev.toFixed(0)}h`} detail={`${report.realPct}% realizado`} icon={<CheckCircle2 className="h-5 w-5" />} />
-        <Kpi title="SV" value={`${report.sv >= 0 ? '+' : ''}${report.sv.toFixed(0)}h`} detail={report.sv >= 0 ? 'Adiantado' : 'Atrasado'} icon={<AlertTriangle className="h-5 w-5" />} tone={report.sv >= 0 ? 'green' : 'red'} />
-        <Kpi title="Atrasos" value={String(report.delayedTasks.length)} detail={`${report.overdueTasks.length} vencida(s)`} icon={<AlertTriangle className="h-5 w-5" />} tone={report.delayedTasks.length ? 'red' : 'green'} />
-        <Kpi title="Forecast" value={report.forecastLabel} detail={report.forecastDetail} icon={<CalendarClock className="h-5 w-5" />} tone={report.forecastTone} />
+        <Kpi title="SPI" value={report.spiText} detail={report.spiStatus} icon={<Gauge className="h-5 w-5" />} tone={report.spiTone} info="Schedule Performance Index. Mede eficiência do cronograma: EV dividido por PV. Abaixo de 1 indica atraso; acima de 1 indica avanço sobre o planejado." />
+        <Kpi title="PV" value={`${report.pv.toFixed(0)}h`} detail={`${report.plannedPct}% planejado`} icon={<TrendingUp className="h-5 w-5" />} info="Planned Value. Representa o volume de horas que deveria estar concluído até hoje, usando o % planejado e o peso em horas de cada tarefa." />
+        <Kpi title="EV" value={`${report.ev.toFixed(0)}h`} detail={`${report.realPct}% realizado`} icon={<CheckCircle2 className="h-5 w-5" />} info="Earned Value. Representa as horas efetivamente ganhas pelo avanço real do cronograma, calculadas pelo % realizado de cada tarefa." />
+        <Kpi title="SV" value={`${report.sv >= 0 ? '+' : ''}${report.sv.toFixed(0)}h`} detail={report.sv >= 0 ? 'Adiantado' : 'Atrasado'} icon={<AlertTriangle className="h-5 w-5" />} tone={report.sv >= 0 ? 'green' : 'red'} info="Schedule Variance. Diferença entre EV e PV. Valor negativo mostra déficit de execução em horas; valor positivo mostra avanço sobre o plano." />
+        <Kpi title="Atrasos" value={String(report.delayedTasks.length)} detail={`${report.overdueTasks.length} vencida(s)`} icon={<AlertTriangle className="h-5 w-5" />} tone={report.delayedTasks.length ? 'red' : 'green'} info="Conta tarefas com % Real abaixo do % Plan. por mais de 5 pontos ou tarefas vencidas pela data final e ainda não concluídas." />
+        <Kpi title="Forecast" value={report.forecastLabel} detail={report.forecastDetail} icon={<CalendarClock className="h-5 w-5" />} tone={report.forecastTone} info="Projeção simples da data final baseada no SPI atual. Quanto menor o SPI, maior a tendência de extensão do prazo planejado." />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
@@ -573,18 +574,50 @@ function emptyPoint(): CurvePoint {
   return { date: asOfIso, label: 'Hoje', planned: 0, realized: 0, pv: 0, ev: 0, spi: null, baseline: 1 }
 }
 
-function Kpi({ title, value, detail, icon, tone = 'blue' }: { title: string; value: string; detail: string; icon: ReactNode; tone?: KpiTone }) {
+function Kpi({
+  title,
+  value,
+  detail,
+  icon,
+  info,
+  tone = 'blue',
+}: {
+  title: string
+  value: string
+  detail: string
+  icon: ReactNode
+  info: string
+  tone?: KpiTone
+}) {
+  const [open, setOpen] = useState(false)
   const toneClass = tone === 'green' ? 'text-success' : tone === 'amber' ? 'text-warn' : tone === 'red' ? 'text-danger' : 'text-brand-600'
   return (
     <article className="card2">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm text-text-secondary">{title}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-text-secondary">{title}</p>
+            <button
+              className={`inline-flex h-6 w-6 items-center justify-center rounded-[8px] border border-surface-border bg-[#0f1229] transition hover:border-brand-600 hover:text-text-primary ${open ? 'text-brand-600' : 'text-text-muted'}`}
+              type="button"
+              aria-expanded={open}
+              aria-label={`Explicar ${title}`}
+              title={`Explicar ${title}`}
+              onClick={() => setOpen((current) => !current)}
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+            </button>
+          </div>
           <strong className="mt-2 block text-2xl text-text-primary">{value}</strong>
         </div>
         <span className={`rounded-[8px] bg-[#0f1229] p-2 ${toneClass}`}>{icon}</span>
       </div>
       <span className="mt-4 block text-xs text-text-muted">{detail}</span>
+      {open ? (
+        <div className="mt-3 rounded-[8px] border border-brand-600/40 bg-[#0f1229] p-3 text-xs leading-relaxed text-text-secondary">
+          {info}
+        </div>
+      ) : null}
     </article>
   )
 }
