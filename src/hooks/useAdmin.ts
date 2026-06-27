@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { adminDB } from '@/lib/database'
 import { useAuthStore } from '@/store'
 import { applyTenantTheme } from '@/lib/utils'
-import type { CreateTenantInput, Tenant, TenantContact, TenantContactInput, UpdateTenantInput, User, UserRole } from '@/types'
+import type { CreateTenantInput, CreateTenantUserInput, Tenant, TenantContact, TenantContactInput, UpdateTenantInput, User, UserRole } from '@/types'
 
 const demoUsers: User[] = [
   {
@@ -281,6 +281,25 @@ export function useAdmin() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'tenant-contacts'] }),
   })
 
+  const createTenantUser = useMutation({
+    mutationFn: async (input: CreateTenantUserInput) => {
+      if (!isDemo) return adminDB.createTenantUser(input)
+
+      const created: User = {
+        id: `demo-user-${Date.now()}`,
+        tenant_id: input.tenant_id,
+        full_name: input.full_name,
+        email: input.email.toLowerCase(),
+        role: input.role,
+        active: true,
+        created_at: new Date().toISOString(),
+      }
+      setDemoState((items) => [created, ...items])
+      return created
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  })
+
   return {
     users,
     tenant,
@@ -296,6 +315,7 @@ export function useAdmin() {
     updateProfile,
     updateTenant,
     createTenant,
+    createTenantUser,
     updateTenantById,
     updateTenantContact,
   }

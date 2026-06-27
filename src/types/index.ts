@@ -99,6 +99,13 @@ export interface TenantContact extends BaseEntity {
 export type CreateTenantInput = Pick<Tenant, 'slug' | 'name'> & Partial<Omit<Tenant, keyof BaseEntity | 'slug' | 'name'>>
 export type UpdateTenantInput = Partial<CreateTenantInput>
 export type TenantContactInput = Omit<TenantContact, 'id' | 'created_at' | 'updated_at'>
+export interface CreateTenantUserInput {
+  tenant_id: string
+  full_name: string
+  email: string
+  password: string
+  role: UserRole
+}
 
 // ── Project ───────────────────────────────────────────────────
 export interface Project extends BaseEntity {

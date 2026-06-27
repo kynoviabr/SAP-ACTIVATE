@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { Building2, CheckCircle2, CircleDollarSign, FolderKanban, Palette, Plus, Search, Shield, UserCheck } from 'lucide-react'
+import { Building2, CheckCircle2, CircleDollarSign, FolderKanban, KeyRound, Palette, Plus, Search, Shield, UserCheck, UserPlus } from 'lucide-react'
 import { useAdmin } from '@/hooks/useAdmin'
 import { useAuthStore } from '@/store'
-import type { AIProvider, CreateTenantInput, Tenant, TenantContactInput, TenantContactType, User, UserRole } from '@/types'
+import type { AIProvider, CreateTenantInput, CreateTenantUserInput, Tenant, TenantContactInput, TenantContactType, User, UserRole } from '@/types'
 
 const platformRoles: UserRole[] = ['SUPER_ADMIN', 'ADMIN', 'USER', 'VIEWER']
 const tenantRoles: UserRole[] = ['ADMIN', 'USER', 'VIEWER']
@@ -68,6 +68,14 @@ const initialClient: CreateTenantInput = {
   active: true,
 }
 
+const initialAccessDraft: CreateTenantUserInput = {
+  tenant_id: '',
+  full_name: '',
+  email: '',
+  password: '',
+  role: 'ADMIN',
+}
+
 export default function AdminPage() {
   const currentUser = useAuthStore((s) => s.user)
   const {
@@ -83,6 +91,7 @@ export default function AdminPage() {
     updateActive,
     updateTenant,
     createTenant,
+    createTenantUser,
     updateTenantById,
   } = useAdmin()
   const [search, setSearch] = useState('')
@@ -90,8 +99,12 @@ export default function AdminPage() {
   const [clientDraft, setClientDraft] = useState<CreateTenantInput>(initialClient)
   const [contactsDraft, setContactsDraft] = useState<ContactDraft[]>(initialContacts)
   const [formError, setFormError] = useState('')
+  const [accessDraft, setAccessDraft] = useState<CreateTenantUserInput>(initialAccessDraft)
+  const [accessError, setAccessError] = useState('')
+  const [accessSuccess, setAccessSuccess] = useState('')
   const canManageClients = isPlatformAdmin
   const [tenantDraft, setTenantDraft] = useState<Partial<Tenant>>({})
+  const manageableTenants = useMemo(() => canManageClients ? tenants : tenant ? [tenant] : [], [canManageClients, tenant, tenants])
 
   useEffect(() => {
     setTenantDraft({
@@ -104,6 +117,12 @@ export default function AdminPage() {
       ai_model: tenant?.ai_model,
     })
   }, [tenant])
+
+  useEffect(() => {
+    if (accessDraft.tenant_id || !manageableTenants.length) return
+    const firstClientTenant = manageableTenants.find((item) => item.slug !== 'kynovia-platform') ?? manageableTenants[0]
+    setAccessDraft((draft) => ({ ...draft, tenant_id: firstClientTenant.id }))
+  }, [accessDraft.tenant_id, manageableTenants])
 
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -205,6 +224,46 @@ export default function AdminPage() {
     setContactsDraft(initialContacts())
   }
 
+  async function saveAccess(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setAccessError('')
+    setAccessSuccess('')
+
+    if (!accessDraft.tenant_id) {
+      setAccessError('Selecione o cliente/tenant.')
+      return
+    }
+    if (!accessDraft.full_name.trim()) {
+      setAccessError('Informe o nome completo do usuario.')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accessDraft.email.trim())) {
+      setAccessError('Informe um e-mail valido.')
+      return
+    }
+    if (accessDraft.password.length < 8) {
+      setAccessError('A senha temporaria precisa ter pelo menos 8 caracteres.')
+      return
+    }
+    if (accessDraft.role === 'SUPER_ADMIN') {
+      setAccessError('Use este fluxo apenas para acessos de cliente: ADMIN, USER ou VIEWER.')
+      return
+    }
+
+    const created = await createTenantUser.mutateAsync({
+      ...accessDraft,
+      full_name: accessDraft.full_name.trim(),
+      email: accessDraft.email.trim().toLowerCase(),
+    })
+    const tenantName = manageableTenants.find((item) => item.id === created.tenant_id)?.name ?? 'cliente'
+    setAccessSuccess(`Acesso criado para ${created.email} em ${tenantName}.`)
+    setAccessDraft((draft) => ({
+      ...initialAccessDraft,
+      tenant_id: draft.tenant_id,
+      role: 'ADMIN',
+    }))
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -239,6 +298,83 @@ export default function AdminPage() {
         <Kpi icon={<UserCheck className="h-4 w-4" />} label="Usuarios ativos" value={summary.active} />
         <Kpi icon={<Shield className="h-4 w-4" />} label="Admins" value={summary.admins} />
         <Kpi icon={<Building2 className="h-4 w-4" />} label="Clientes" value={summary.clients} />
+      </section>
+
+      <section className="mb-5 grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+        <form className="card" onSubmit={saveAccess}>
+          <div className="mb-5 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-text-primary">Novo acesso de cliente</h2>
+              <p className="text-sm text-text-secondary">Crie o administrador ou usuario do tenant para que ele acesse apenas a propria area.</p>
+            </div>
+            <span className="rounded-[8px] bg-[#0f1229] p-2 text-brand-600"><UserPlus className="h-5 w-5" /></span>
+          </div>
+
+          {accessError ? <div className="mb-4 rounded-[8px] border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{accessError}</div> : null}
+          {accessSuccess ? <div className="mb-4 rounded-[8px] border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">{accessSuccess}</div> : null}
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="mb-3 block">
+              <span className="label">Cliente / tenant</span>
+              <select
+                className="input"
+                value={accessDraft.tenant_id}
+                disabled={!canManageClients}
+                onChange={(event) => setAccessDraft((draft) => ({ ...draft, tenant_id: event.target.value }))}
+              >
+                {manageableTenants.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="mb-3 block">
+              <span className="label">Perfil</span>
+              <select className="input" value={accessDraft.role} onChange={(event) => setAccessDraft((draft) => ({ ...draft, role: event.target.value as UserRole }))}>
+                {tenantRoles.map((role) => <option key={role} value={role}>{role}</option>)}
+              </select>
+            </label>
+            <Input label="Nome completo" value={accessDraft.full_name} onChange={(full_name) => setAccessDraft((draft) => ({ ...draft, full_name }))} />
+            <Input label="E-mail de login" value={accessDraft.email} onChange={(email) => setAccessDraft((draft) => ({ ...draft, email }))} />
+            <label className="mb-3 block md:col-span-2">
+              <span className="label">Senha temporaria</span>
+              <div className="flex gap-2">
+                <input
+                  className="input"
+                  type="text"
+                  value={accessDraft.password}
+                  onChange={(event) => setAccessDraft((draft) => ({ ...draft, password: event.target.value }))}
+                />
+                <button
+                  className="btn-secondary shrink-0"
+                  type="button"
+                  onClick={() => setAccessDraft((draft) => ({ ...draft, password: generateTempPassword() }))}
+                >
+                  <KeyRound className="h-4 w-4" />
+                  Gerar
+                </button>
+              </div>
+            </label>
+          </div>
+
+          <div className="mt-2 flex justify-end">
+            <button className="btn-primary" type="submit" disabled={createTenantUser.isPending || !manageableTenants.length}>
+              <CheckCircle2 className="h-4 w-4" />
+              {createTenantUser.isPending ? 'Criando acesso...' : 'Criar acesso'}
+            </button>
+          </div>
+        </form>
+
+        <div className="card2">
+          <div className="flex items-center gap-3">
+            <span className="rounded-[8px] bg-[#0f1229] p-2 text-brand-600"><Shield className="h-5 w-5" /></span>
+            <div>
+              <h2 className="font-bold text-text-primary">Isolamento por tenant</h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                O admin do cliente ve somente os projetos, usuarios e configuracoes do proprio cliente. O Super Admin continua vendo todos os clientes.
+              </p>
+            </div>
+          </div>
+        </div>
       </section>
 
       {canManageClients ? (
@@ -342,6 +478,7 @@ export default function AdminPage() {
                     key={item.id}
                     tenant={item}
                     contacts={tenantContactsByTenant[item.id] ?? []}
+                    onCreateAccess={() => setAccessDraft((draft) => ({ ...draft, tenant_id: item.id, role: 'ADMIN' }))}
                     onCommercialChange={(input) => updateTenantById.mutate({ tenantId: item.id, input })}
                   />
                 ))}
@@ -449,7 +586,7 @@ function ContactEditor({ index, contact, onChange }: { index: number; contact: C
   )
 }
 
-function TenantCard({ tenant, contacts, onCommercialChange }: { tenant: Tenant; contacts: { contact_type: TenantContactType; full_name: string; email: string; whatsapp?: string }[]; onCommercialChange: (input: Partial<Tenant>) => void }) {
+function TenantCard({ tenant, contacts, onCreateAccess, onCommercialChange }: { tenant: Tenant; contacts: { contact_type: TenantContactType; full_name: string; email: string; whatsapp?: string }[]; onCreateAccess: () => void; onCommercialChange: (input: Partial<Tenant>) => void }) {
   return (
     <article className="rounded-[8px] border border-surface-border bg-[#0f1229]/50 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -465,6 +602,10 @@ function TenantCard({ tenant, contacts, onCommercialChange }: { tenant: Tenant; 
         <div className="grid min-w-[260px] gap-2 sm:grid-cols-2">
           <NumberInput label="Projetos" value={tenant.max_projects} onChange={(max_projects) => onCommercialChange({ max_projects })} />
           <NumberInput label="Valor BRL" value={tenant.project_unit_price ?? 0} onChange={(project_unit_price) => onCommercialChange({ project_unit_price })} />
+          <button className="btn-secondary btn-sm sm:col-span-2" type="button" onClick={onCreateAccess}>
+            <UserPlus className="h-4 w-4" />
+            Criar acesso
+          </button>
         </div>
       </div>
       <div className="mt-4 grid gap-2 md:grid-cols-2">
@@ -576,4 +717,10 @@ function normalizeCnpj(value: string) {
 
 function isValidAlphaCnpj(value: string) {
   return /^[A-Z0-9]{14}$/.test(value)
+}
+
+function generateTempPassword() {
+  const bytes = new Uint8Array(18)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (byte) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[(byte % 62)]).join('')
 }

@@ -18,7 +18,7 @@ import type {
   ChangeRequest, CreateChangeRequestInput, UpdateChangeRequestInput,
   BillingItem, CreateBillingInput, UpdateBillingInput,
   TravelItem, CreateTravelInput, UpdateTravelInput,
-  User, Tenant, UserRole, TenantContact, CreateTenantInput, UpdateTenantInput, TenantContactInput,
+  User, Tenant, UserRole, TenantContact, CreateTenantInput, UpdateTenantInput, TenantContactInput, CreateTenantUserInput,
 } from '@/types'
 
 async function q<T>(fn: () => PromiseLike<{ data: T | null; error: unknown }>): Promise<T> {
@@ -379,6 +379,14 @@ export const adminDB = {
   }),
   createTenantContact: (input: TenantContactInput) =>
     q<TenantContact>(() => supabase.from('tenant_contacts').insert(input).select().single()),
+  createTenantUser: (input: CreateTenantUserInput) =>
+    q<User>(() => supabase.rpc('admin_create_tenant_user', {
+      p_tenant_id: input.tenant_id,
+      p_full_name: input.full_name,
+      p_email: input.email,
+      p_password: input.password,
+      p_role: input.role,
+    })),
   updateTenantContact: (id: string, input: Partial<TenantContactInput>) =>
     q<TenantContact>(() => supabase.from('tenant_contacts').update(input).eq('id', id).select().single()),
   deleteTenantContact: (id: string) =>
