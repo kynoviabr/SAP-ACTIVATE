@@ -4,7 +4,18 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { AlertTriangle, Layers, LogIn, Mail, PlayCircle, Terminal, UserPlus } from 'lucide-react'
+import {
+  Activity,
+  AlertTriangle,
+  Building2,
+  Layers,
+  LogIn,
+  Mail,
+  Monitor,
+  PlayCircle,
+  Terminal,
+  UserPlus,
+} from 'lucide-react'
 import { useAuthStore, useProjectStore } from '@/store'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 import type { Project } from '@/types'
@@ -185,65 +196,84 @@ export default function AuthPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0A0A0B] p-6 text-[#F4F4F5] antialiased">
-      <ParticleCanvas />
-      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(59,130,246,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.045)_1px,transparent_1px)] bg-[length:56px_56px] [mask-image:radial-gradient(ellipse_70%_80%_at_50%_40%,black_20%,transparent_80%)]" />
-      <div className="pointer-events-none fixed right-[-80px] top-[-120px] h-[400px] w-[500px] rounded-full bg-[rgba(37,99,235,0.16)] blur-[110px]" />
-      <div className="pointer-events-none fixed bottom-[-100px] left-[-80px] h-[300px] w-[360px] rounded-full bg-[rgba(59,130,246,0.08)] blur-[90px]" />
+    <main className="grid min-h-screen bg-[#0A0A0B] antialiased lg:grid-cols-2 lg:grid-rows-[1fr_auto]">
+      <section className="relative hidden min-h-screen overflow-hidden bg-[#0A0A0B] px-12 py-10 lg:flex lg:flex-col">
+        <LeftCanvas />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.045)_1px,transparent_1px)] bg-[length:56px_56px] [mask-image:radial-gradient(ellipse_80%_90%_at_30%_50%,black_10%,transparent_80%)]" />
+        <div className="pointer-events-none absolute right-[-80px] top-[-120px] h-[380px] w-[480px] rounded-full bg-[radial-gradient(circle,rgba(37,99,235,0.18)_0%,transparent_65%)] blur-[100px]" />
+        <div className="pointer-events-none absolute bottom-[-80px] left-[-60px] h-[280px] w-[320px] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.09)_0%,transparent_70%)] blur-[100px]" />
 
-      <section className="relative z-10 grid w-full max-w-[860px] animate-fade-in overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.06)] bg-[#111112] shadow-2xl shadow-black/30 md:grid-cols-2">
-        <aside className="relative hidden min-h-[560px] overflow-hidden border-r border-[rgba(255,255,255,0.06)] bg-[#0A0A0B] px-9 py-10 md:flex md:flex-col md:justify-between">
-          <div className="pointer-events-none absolute right-[-100px] top-[-100px] h-[300px] w-[300px] rounded-full bg-[rgba(37,99,235,0.10)] blur-[60px]" />
+        <div className="relative z-10 flex h-full flex-col">
+          <a className="inline-flex items-center gap-2.5" href="/login" aria-label="Kynovia">
+            <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-[#2563EB]">
+              <Layers className="h-4 w-4 text-white" strokeWidth={1.6} />
+            </span>
+            <span className="text-base font-bold tracking-[-0.2px] text-[#F4F4F5]">
+              Kynov<span className="text-[#3B82F6]">ia</span>
+            </span>
+          </a>
 
-          <div className="relative">
-            <a className="inline-flex items-center gap-2.5 text-decoration-none" href="/login" aria-label="Kynovia">
-              <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] bg-[#2563EB]">
-                <Layers className="h-4 w-4 text-white" strokeWidth={1.6} />
-              </span>
-              <span className="text-base font-bold tracking-[-0.2px] text-[#F4F4F5]">
-                Kynov<span className="text-[#3B82F6]">ia</span>
-              </span>
-            </a>
-
-            <div className="mt-8 inline-flex w-fit items-center gap-2 rounded-full border border-[rgba(37,99,235,0.22)] bg-[rgba(37,99,235,0.10)] py-[5px] pl-2 pr-3.5 font-mono text-[11px] font-medium tracking-[0.04em] text-[#93C5FD]">
-              <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#3B82F6] shadow-[0_0_6px_#3B82F6,0_0_12px_rgba(59,130,246,0.4)]" />
-              SAP ACTIVATE PORTAL
-            </div>
+          <div className="mt-9 inline-flex w-fit items-center gap-2 rounded-full border border-[rgba(37,99,235,0.22)] bg-[rgba(37,99,235,0.10)] py-[5px] pl-2 pr-3.5 font-mono text-[11px] font-medium tracking-[0.04em] text-[#93C5FD]">
+            <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#3B82F6] shadow-[0_0_6px_#3B82F6,0_0_12px_rgba(59,130,246,0.4)]" />
+            SAP Activate · Project Management
           </div>
 
-          <div className="relative flex flex-1 flex-col justify-center py-7">
-            <div className="mb-3.5 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-[#52525B]">
-              // Project Management
+          <div className="flex flex-1 flex-col justify-center py-8">
+            <div className="mb-4 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-[#52525B]">
+              // Project Management Portal
             </div>
-            <h1 className="mb-3 max-w-[280px] text-[22px] font-bold leading-[1.3] tracking-[-0.5px] text-[#F4F4F5]">
+            <h1 className="mb-4 max-w-[560px] text-[clamp(26px,2.8vw,40px)] font-bold leading-[1.2] tracking-[-1.5px] text-[#F4F4F5]">
               Visibilidade total sobre cada <span className="text-[#3B82F6]">fase</span> do projeto.
             </h1>
-            <p className="mb-6 max-w-[250px] text-[13.5px] leading-[1.6] text-[#A1A1AA]">
+            <p className="mb-8 max-w-[360px] text-[14.5px] leading-[1.65] text-[#A1A1AA]">
               Rastreie entregas, riscos e KPIs em tempo real, da Preparação ao Go-Live.
             </p>
 
-            <div className="flex flex-col gap-[5px]">
-              <PhaseRow color="#3B82F6" shadow="rgba(59,130,246,0.5)" name="Discover & Prepare" tag="Fase 1" />
-              <PhaseRow color="#10B981" shadow="rgba(16,185,129,0.5)" name="Explore & Realize" tag="Fase 2-3" />
-              <PhaseRow color="#F59E0B" shadow="rgba(245,158,11,0.5)" name="Deploy & Run" tag="Fase 4-5" />
+            <div className="flex flex-col gap-2.5">
+              <Feature icon={<Monitor className="h-[15px] w-[15px]" />} title="Dashboard em tempo real">
+                Acompanhe cada fase SAP Activate com indicadores vivos
+              </Feature>
+              <Feature icon={<Activity className="h-[15px] w-[15px]" />} title="EVM e cronograma integrados">
+                Custo, prazo e escopo sob controle em um só lugar
+              </Feature>
+              <Feature icon={<Building2 className="h-[15px] w-[15px]" />} title="Multi-tenant white-label">
+                Cada cliente acessa seu próprio ambiente isolado
+              </Feature>
             </div>
 
-            <div className="mt-6 flex gap-5 border-t border-[rgba(255,255,255,0.06)] pt-5">
-              <Stat value="12" suffix="+" label="Projetos ativos" />
-              <Stat value="98" suffix="%" label="SLA cumprido" />
-              <Stat value="5" suffix="x" label="Faster delivery" />
+            <div className="mt-7 flex flex-col gap-[7px]">
+              <PhaseRow color="#3B82F6" shadow="rgba(59,130,246,.55)" name="Discover & Prepare" tag="Fase 1" />
+              <PhaseRow color="#10B981" shadow="rgba(16,185,129,.55)" name="Explore & Realize" tag="Fase 2-3" />
+              <PhaseRow color="#F59E0B" shadow="rgba(245,158,11,.55)" name="Deploy & Run" tag="Fase 4-5" />
             </div>
           </div>
 
-          <div className="relative font-mono text-[10px] tracking-[0.06em] text-[#52525B]">
+          <div className="mt-7 font-mono text-[10px] tracking-[0.06em] text-[#52525B]">
             © 2026 KYNOVIA · ENTERPRISE EDITION
           </div>
-        </aside>
+        </div>
+      </section>
 
-        <section className="bg-[#111112] px-6 py-8 md:px-9 md:py-10">
-          <div className="mb-6">
-            <h2 className="mb-1 text-lg font-semibold tracking-[-0.3px] text-[#F4F4F5]">Acessar portal</h2>
-            <p className="text-[13px] text-[#A1A1AA]">Entre com sua conta corporativa</p>
+      <section className="flex min-h-screen items-center justify-center bg-[#F8F8FA] px-6 py-10 lg:px-12 lg:py-[60px]">
+        <div className="w-full max-w-[400px]">
+          <h2 className="mb-[5px] text-[26px] font-bold tracking-[-0.8px] text-[#0F0F10]">Acessar portal.</h2>
+          <p className="mb-[26px] text-sm text-[#71717A]">Entre com sua conta corporativa para continuar.</p>
+
+          <div className="mb-5 flex gap-[3px] rounded-[9px] bg-[#EBEBED] p-[3px]">
+            {(['login', 'register', 'reset'] as Tab[]).map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={`flex-1 rounded-[7px] px-1.5 py-2 text-[13px] font-medium tracking-[-0.1px] transition ${
+                  tab === item
+                    ? 'bg-white text-[#0F0F10] shadow-[0_1px_3px_rgba(0,0,0,0.10)]'
+                    : 'text-[#71717A] hover:text-[#0F0F10]'
+                }`}
+                onClick={() => selectTab(item)}
+              >
+                {tabLabel[item]}
+              </button>
+            ))}
           </div>
 
           {!isSupabaseConfigured && (
@@ -253,23 +283,6 @@ export default function AuthPage() {
           )}
           {error && <Message tone="error">{error}</Message>}
           {success && <Message tone="success">{success}</Message>}
-
-          <div className="mb-[22px] flex gap-0 border-b border-[rgba(255,255,255,0.06)]">
-            {(['login', 'register', 'reset'] as Tab[]).map((item) => (
-              <button
-                key={item}
-                type="button"
-                className={`mb-[-1px] mr-[18px] border-b-2 px-0 py-2 text-[13px] font-medium tracking-[0.01em] transition ${
-                  tab === item
-                    ? 'border-[#3B82F6] text-[#F4F4F5]'
-                    : 'border-transparent text-[#52525B] hover:text-[#A1A1AA]'
-                }`}
-                onClick={() => selectTab(item)}
-              >
-                {tabLabel[item]}
-              </button>
-            ))}
-          </div>
 
           {tab === 'login' && (
             <form onSubmit={loginForm.handleSubmit(handleLogin)}>
@@ -285,6 +298,11 @@ export default function AuthPage() {
               />
               <Field
                 label="Senha"
+                action={
+                  <button type="button" className="text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]" onClick={() => selectTab('reset')}>
+                    Esqueci minha senha
+                  </button>
+                }
                 error={loginForm.formState.errors.password?.message}
                 inputProps={{
                   ...loginForm.register('password'),
@@ -293,26 +311,31 @@ export default function AuthPage() {
                   autoComplete: 'current-password',
                 }}
               />
-              <div className="-mt-1.5 mb-[18px] flex justify-end">
-                <button
-                  type="button"
-                  className="text-xs text-[#60A5FA] transition hover:text-[#93C5FD]"
-                  onClick={() => selectTab('reset')}
-                >
-                  Esqueci minha senha
-                </button>
-              </div>
+              <div className="h-1" />
               <PrimaryButton loading={loading} icon={<LogIn className="h-3.5 w-3.5" />}>
                 Entrar
               </PrimaryButton>
-              <OutlineButton type="button" onClick={handleDemoLogin} icon={<PlayCircle className="h-3.5 w-3.5" />}>
+              <div className="my-3.5 flex items-center gap-3">
+                <span className="h-px flex-1 bg-[#E4E4E7]" />
+                <span className="font-mono text-[11px] tracking-[0.08em] text-[#A1A1AA]">OU</span>
+                <span className="h-px flex-1 bg-[#E4E4E7]" />
+              </div>
+              <button
+                type="button"
+                className="flex w-full items-center justify-center gap-2 rounded-[8px] border border-dashed border-[#D4D4D8] bg-transparent p-2.5 text-[13.5px] font-medium tracking-[-0.1px] text-[#71717A] transition hover:border-[#3B82F6] hover:bg-[rgba(37,99,235,0.04)] hover:text-[#2563EB]"
+                onClick={handleDemoLogin}
+              >
+                <PlayCircle className="h-3.5 w-3.5" />
                 Entrar em modo demo
-              </OutlineButton>
-              <div className="mt-2.5 flex items-center gap-2 rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[#0A0A0B] px-3 py-[9px]">
-                <Terminal className="h-[13px] w-[13px] shrink-0 text-[#52525B]" strokeWidth={1.5} />
-                <span className="font-mono text-[11px] tracking-[0.04em] text-[#52525B]">
-                  demo local: <span className="text-[#60A5FA]">demo@sap.local</span> / <span className="text-[#60A5FA]">demo1234</span>
-                </span>
+              </button>
+              <div className="mt-2 overflow-hidden rounded-[8px] border border-[#E4E4E7] bg-white">
+                <div className="flex items-center gap-2 border-b border-[#E4E4E7] bg-[#F4F4F5] px-3 py-2">
+                  <Terminal className="h-3 w-3 text-[#A1A1AA]" strokeWidth={1.5} />
+                  <span className="font-mono text-[10.5px] uppercase tracking-[0.05em] text-[#A1A1AA]">Credenciais de demonstração</span>
+                </div>
+                <div className="px-3 py-2 font-mono text-[11.5px] tracking-[0.03em] text-[#71717A]">
+                  <span className="font-medium text-[#2563EB]">demo@sap.local</span> &nbsp;/&nbsp; <span className="font-medium text-[#2563EB]">demo1234</span>
+                </div>
               </div>
             </form>
           )}
@@ -349,6 +372,7 @@ export default function AuthPage() {
                   autoComplete: 'new-password',
                 }}
               />
+              <div className="h-1" />
               <PrimaryButton loading={regLoading} icon={<UserPlus className="h-3.5 w-3.5" />}>
                 Criar conta
               </PrimaryButton>
@@ -367,59 +391,61 @@ export default function AuthPage() {
                   autoComplete: 'email',
                 }}
               />
+              <div className="h-1" />
               <PrimaryButton loading={resetLoading} icon={<Mail className="h-3.5 w-3.5" />}>
                 Enviar link de redefinição
               </PrimaryButton>
             </form>
           )}
-
-          <p className="mt-[18px] text-center text-[11.5px] leading-[1.6] text-[#52525B]">
-            Novos cadastros entram como <span className="font-medium text-[#A1A1AA]">Usuário</span>.<br />
-            Apenas o <span className="font-semibold text-[#60A5FA]">ADM</span> pode promover perfis e apagar dados.
-          </p>
-        </section>
+        </div>
       </section>
+
+      <footer className="border-t border-[rgba(255,255,255,0.06)] bg-[#0A0A0B] px-6 py-3.5 lg:col-span-2 lg:px-12">
+        <p className="mx-auto max-w-[780px] text-center font-mono text-[10px] leading-[1.6] tracking-[0.03em] text-[#52525B]">
+          SAP® e SAP Activate® são marcas registradas da SAP SE na Alemanha e em outros países.
+          A Kynovia não é afiliada, patrocinada ou endossada pela SAP SE.
+          Este portal utiliza a metodologia SAP Activate como referência de gestão de projetos.
+        </p>
+        <p className="mt-1.5 text-center font-mono text-[10px] leading-[1.6] tracking-[0.03em] text-[#52525B]">
+          © 2026 Kynovia Tecnologia. Todos os direitos reservados.
+        </p>
+      </footer>
     </main>
   )
 }
 
 function Field({
   label,
+  action,
   error,
   inputProps,
 }: {
   label: string
+  action?: ReactNode
   error?: string
   inputProps: InputHTMLAttributes<HTMLInputElement>
 }) {
   return (
-    <label className="mb-3.5 block">
-      <span className="mb-1.5 block font-mono text-[10px] font-medium uppercase tracking-[0.10em] text-[#52525B]">
-        {label}
+    <label className="mb-[13px] block">
+      <span className="mb-[5px] flex items-baseline justify-between gap-3">
+        <span className="text-xs font-semibold tracking-[0.01em] text-[#3F3F46]">{label}</span>
+        {action}
       </span>
       <input
         {...inputProps}
-        className="w-full rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[#18181A] px-[13px] py-2.5 text-[13.5px] text-[#F4F4F5] outline-none transition placeholder:text-[#52525B] focus:border-[rgba(59,130,246,0.5)] focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)]"
+        className="mt-[5px] w-full rounded-[8px] border border-[#E4E4E7] bg-white px-[13px] py-2.5 text-sm text-[#0F0F10] outline-none transition placeholder:text-[#A1A1AA] focus:border-[#3B82F6] focus:shadow-[0_0_0_3px_rgba(37,99,235,0.10)]"
       />
-      {error ? <span className="mt-1 block text-xs text-[#FCA5A5]">{error}</span> : null}
+      {error ? <span className="mt-1 block text-xs text-[#B91C1C]">{error}</span> : null}
     </label>
   )
 }
 
-function PrimaryButton({
-  children,
-  icon,
-  loading,
-}: {
-  children: string
-  icon: ReactNode
-  loading?: boolean
-}) {
+function PrimaryButton({ children, icon, loading }: { children: string; icon: ReactNode; loading?: boolean }) {
   return (
     <button
       type="submit"
       disabled={loading}
-      className="mb-[9px] inline-flex w-full items-center justify-center gap-2 rounded-[8px] border-0 bg-[#2563EB] px-[22px] py-[11px] text-sm font-medium tracking-[-0.1px] text-white transition hover:-translate-y-px hover:bg-[#1D4ED8] hover:shadow-[0_0_0_4px_rgba(37,99,235,0.18),0_8px_24px_rgba(37,99,235,0.28)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
+      className="flex w-full items-center justify-center gap-2 rounded-[8px] border-0 bg-[#2563EB] px-[22px] py-[11px] text-sm font-medium tracking-[-0.1px] text-white transition hover:-translate-y-px hover:bg-[#1D4ED8] hover:shadow-[0_0_0_4px_rgba(37,99,235,.15),0_6px_20px_rgba(37,99,235,.25)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
     >
       {icon}
       {loading ? 'Processando...' : children}
@@ -427,72 +453,52 @@ function PrimaryButton({
   )
 }
 
-function OutlineButton({
-  children,
-  icon,
-  type = 'button',
-  onClick,
-}: {
-  children: string
-  icon: ReactNode
-  type?: 'button' | 'submit'
-  onClick?: (event: MouseEvent<HTMLButtonElement>) => void
-}) {
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      className="inline-flex w-full items-center justify-center gap-2 rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-transparent px-[22px] py-[11px] text-sm font-medium tracking-[-0.1px] text-[#A1A1AA] transition hover:border-[rgba(255,255,255,0.13)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#F4F4F5]"
-    >
-      {icon}
-      {children}
-    </button>
-  )
-}
-
 function Message({ tone, children }: { tone: 'warning' | 'error' | 'success'; children: string }) {
   const styles = {
-    warning: 'border-[rgba(245,158,11,0.18)] bg-[rgba(245,158,11,0.07)] text-[#FCD34D]',
-    error: 'border-[rgba(248,113,113,0.28)] bg-[rgba(127,29,29,0.35)] text-[#FCA5A5]',
-    success: 'border-[rgba(16,185,129,0.2)] bg-[rgba(16,185,129,0.12)] text-[#6EE7B7]',
+    warning: 'border-[#FDE68A] bg-[#FFFBEB] text-[#92400E]',
+    error: 'border-[#FECACA] bg-[#FEF2F2] text-[#991B1B]',
+    success: 'border-[#A7F3D0] bg-[#ECFDF5] text-[#047857]',
   }[tone]
 
   return (
-    <div className={`mb-5 flex items-start gap-2.5 rounded-[10px] border px-[13px] py-2.5 ${styles}`}>
-      <AlertTriangle className="mt-px h-[15px] w-[15px] shrink-0" strokeWidth={1.5} />
-      <p className="font-mono text-xs leading-[1.5] tracking-[0.01em]">{children}</p>
+    <div className={`mb-[18px] flex items-start gap-[9px] rounded-[8px] border px-[13px] py-2.5 ${styles}`}>
+      <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+      <p className="font-mono text-[11.5px] leading-[1.5]">{children}</p>
+    </div>
+  )
+}
+
+function Feature({ icon, title, children }: { icon: ReactNode; title: string; children: string }) {
+  return (
+    <div className="flex cursor-default items-center gap-3.5 rounded-[10px] border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.022)] px-[15px] py-[11px] transition hover:border-[rgba(59,130,246,0.22)] hover:bg-[rgba(255,255,255,0.038)]">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-[rgba(59,130,246,0.15)] bg-[rgba(37,99,235,0.12)] text-[#60A5FA]">
+        {icon}
+      </span>
+      <span className="text-[13px] leading-[1.4] text-[#A1A1AA]">
+        <span className="mb-px block font-medium text-[#F4F4F5]">{title}</span>
+        {children}
+      </span>
     </div>
   )
 }
 
 function PhaseRow({ color, shadow, name, tag }: { color: string; shadow: string; name: string; tag: string }) {
   return (
-    <div className="flex items-center gap-2.5 rounded-[10px] border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.025)] px-3 py-2 transition hover:border-[rgba(59,130,246,0.18)] hover:bg-[rgba(255,255,255,0.04)]">
+    <div className="flex items-center gap-2.5 rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.018)] px-3 py-2 transition hover:border-[rgba(59,130,246,0.22)]">
       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${shadow}` }} />
       <span className="font-mono text-xs tracking-[0.02em] text-[#A1A1AA]">{name}</span>
-      <span className="ml-auto font-mono text-[9.5px] font-medium uppercase tracking-[0.06em] text-[#52525B]">{tag}</span>
+      <span className="ml-auto font-mono text-[9.5px] uppercase tracking-[0.06em] text-[#52525B]">{tag}</span>
     </div>
   )
 }
 
-function Stat({ value, suffix, label }: { value: string; suffix: string; label: string }) {
-  return (
-    <div className="flex-1">
-      <div className="text-[22px] font-bold leading-none tracking-[-1.5px] text-[#F4F4F5]">
-        {value}<span className="text-[#3B82F6]">{suffix}</span>
-      </div>
-      <div className="mt-1 font-mono text-[11px] tracking-[0.04em] text-[#52525B]">{label}</div>
-    </div>
-  )
-}
-
-function ParticleCanvas() {
+function LeftCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
     if (!canvasRef.current) return
-    const htmlCanvas: HTMLCanvasElement = canvasRef.current
-    const maybeContext = htmlCanvas.getContext('2d')
+    const canvas: HTMLCanvasElement = canvasRef.current
+    const maybeContext = canvas.getContext('2d')
     if (!maybeContext) return
     const context: CanvasRenderingContext2D = maybeContext
 
@@ -502,19 +508,21 @@ function ParticleCanvas() {
     let points: Array<{ x: number; y: number; vx: number; vy: number }> = []
 
     function resize() {
+      const parent = canvas.parentElement
+      if (!parent) return
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      width = window.innerWidth
-      height = window.innerHeight
-      htmlCanvas.width = Math.floor(width * dpr)
-      htmlCanvas.height = Math.floor(height * dpr)
-      htmlCanvas.style.width = `${width}px`
-      htmlCanvas.style.height = `${height}px`
+      width = parent.offsetWidth
+      height = parent.offsetHeight
+      canvas.width = Math.floor(width * dpr)
+      canvas.height = Math.floor(height * dpr)
+      canvas.style.width = `${width}px`
+      canvas.style.height = `${height}px`
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
-      points = Array.from({ length: 60 }, () => ({
+      points = Array.from({ length: 55 }, () => ({
         x: Math.random() * width,
         y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: (Math.random() - 0.5) * 0.4,
+        vx: (Math.random() - 0.5) * 0.35,
+        vy: (Math.random() - 0.5) * 0.35,
       }))
     }
 
@@ -527,21 +535,20 @@ function ParticleCanvas() {
         if (p.x < 0 || p.x > width) p.vx *= -1
         if (p.y < 0 || p.y > height) p.vy *= -1
         context.beginPath()
-        context.arc(p.x, p.y, 1.5, 0, Math.PI * 2)
-        context.fillStyle = 'rgba(59,130,246,0.5)'
+        context.arc(p.x, p.y, 1.4, 0, Math.PI * 2)
+        context.fillStyle = 'rgba(59,130,246,0.55)'
         context.fill()
-
         for (let j = i + 1; j < points.length; j += 1) {
           const q = points[j]
           const dx = p.x - q.x
           const dy = p.y - q.y
           const distance = Math.sqrt(dx * dx + dy * dy)
-          if (distance < 120) {
+          if (distance < 110) {
             context.beginPath()
             context.moveTo(p.x, p.y)
             context.lineTo(q.x, q.y)
-            context.strokeStyle = `rgba(59,130,246,${0.15 * (1 - distance / 120)})`
-            context.lineWidth = 0.6
+            context.strokeStyle = `rgba(59,130,246,${0.14 * (1 - distance / 110)})`
+            context.lineWidth = 0.5
             context.stroke()
           }
         }
@@ -559,5 +566,5 @@ function ParticleCanvas() {
     }
   }, [])
 
-  return <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-0 opacity-55" aria-hidden="true" />
+  return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 opacity-45" aria-hidden="true" />
 }
