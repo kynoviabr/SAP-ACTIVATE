@@ -46,6 +46,19 @@ type CurvePoint = {
   baseline: number
 }
 
+type PhaseSummary = {
+  phase: MacroSchedulePhase
+  realPct: number
+  delayed: number
+  overdue: number
+  missingSchedule: number
+}
+
+type CheckpointSummary = {
+  task: MacroScheduleTask
+  status: 'Concluido' | 'Vencido' | 'Atencao' | 'Futuro'
+}
+
 type SquadSummary = {
   squad: string
   tasks: number
@@ -53,6 +66,7 @@ type SquadSummary = {
   ev: number
   pv: number
   spi: number | null
+  delayed: number
   overdue: number
 }
 
@@ -122,11 +136,12 @@ export default function ScheduleReportsPage() {
         </div>
       </header>
 
-      <section className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <section className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <Kpi title="SPI" value={report.spiText} detail={report.spiStatus} icon={<Gauge className="h-5 w-5" />} tone={report.spiTone} />
         <Kpi title="PV" value={`${report.pv.toFixed(0)}h`} detail={`${report.plannedPct}% planejado`} icon={<TrendingUp className="h-5 w-5" />} />
         <Kpi title="EV" value={`${report.ev.toFixed(0)}h`} detail={`${report.realPct}% realizado`} icon={<CheckCircle2 className="h-5 w-5" />} />
         <Kpi title="SV" value={`${report.sv >= 0 ? '+' : ''}${report.sv.toFixed(0)}h`} detail={report.sv >= 0 ? 'Adiantado' : 'Atrasado'} icon={<AlertTriangle className="h-5 w-5" />} tone={report.sv >= 0 ? 'green' : 'red'} />
+        <Kpi title="Atrasos" value={String(report.delayedTasks.length)} detail={`${report.overdueTasks.length} vencida(s)`} icon={<AlertTriangle className="h-5 w-5" />} tone={report.delayedTasks.length ? 'red' : 'green'} />
         <Kpi title="Forecast" value={report.forecastLabel} detail={report.forecastDetail} icon={<CalendarClock className="h-5 w-5" />} tone={report.forecastTone} />
       </section>
 
@@ -184,18 +199,45 @@ export default function ScheduleReportsPage() {
               <div key={phase.phase} className="rounded-[8px] border border-surface-border bg-[#0f1229] p-3">
                 <div className="mb-2 flex items-center justify-between text-sm">
                   <span className="font-semibold text-text-primary">{phase.phase}</span>
-                  <span className={phase.overdue ? 'text-danger' : 'text-success'}>{phase.overdue} atrasada(s)</span>
+                  <span className={phase.delayed ? 'text-danger' : 'text-success'}>{phase.delayed} em atraso</span>
                 </div>
-                <div className="grid grid-cols-[1fr_80px] items-center gap-3">
+                <div className="grid grid-cols-[1fr_120px] items-center gap-3">
                   <div className="progress-bar h-2">
                     <div className="progress-fill" style={{ width: `${phase.realPct}%`, background: MACRO_PHASE_COLORS[phase.phase] }} />
                   </div>
                   <span className="text-right text-xs text-text-secondary">{phase.realPct}%</span>
                 </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                  <span className={phase.overdue ? 'badge badge-red' : 'badge badge-gray'}>{phase.overdue} vencida(s)</span>
+                  <span className={phase.missingSchedule ? 'badge badge-amber' : 'badge badge-gray'}>{phase.missingSchedule} sem data</span>
+                </div>
               </div>
             ))}
           </div>
         </section>
+      </section>
+
+      <section className="card mt-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-text-primary">Pontos de checagem do cronograma</h2>
+            <p className="mt-1 text-xs text-text-muted">Marcos, cutovers, go-lives e gates com indicação de vencimento ou desvio de progresso.</p>
+          </div>
+          <span className="badge badge-blue">{report.checkpoints.length} checkpoint(s)</span>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {report.checkpoints.slice(0, 8).map(({ task, status }) => (
+            <div key={task.id} className="rounded-[8px] border border-surface-border bg-[#0f1229] p-3">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <span className="wbs-badge shrink-0">{task.wbs}</span>
+                <span className={`badge ${checkpointClass(status)}`}>{checkpointLabel(status)}</span>
+              </div>
+              <h3 className="line-clamp-2 text-sm font-semibold text-text-primary">{task.title}</h3>
+              <p className="mt-2 text-xs text-text-secondary">{task.phase} - {formatDate(task.end_date)} - {task.real_pct}% real</p>
+            </div>
+          ))}
+        </div>
+        {!report.checkpoints.length ? <p className="text-sm text-text-secondary">Nenhum ponto de checagem identificado no cronograma.</p> : null}
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
@@ -262,7 +304,7 @@ export default function ScheduleReportsPage() {
               <div key={squad.squad} className="grid grid-cols-[1fr_58px_58px] items-center gap-3 text-xs">
                 <span className="truncate text-text-secondary">{squad.squad}</span>
                 <span className={squad.spi !== null && squad.spi < 1 ? 'text-warn' : 'text-success'}>{squad.spi === null ? '-' : squad.spi.toFixed(2)}</span>
-                <span className="text-right text-text-muted">{squad.tasks} itens</span>
+                <span className={squad.delayed ? 'text-right text-danger' : 'text-right text-text-muted'}>{squad.delayed}/{squad.tasks}</span>
               </div>
             ))}
           </div>
@@ -290,6 +332,8 @@ function buildScheduleReport(sourceTasks: MacroScheduleTask[], holidays: string[
   const plannedPct = Math.round((pv / totalHours) * 100)
   const realPct = Math.round((ev / totalHours) * 100)
   const forecast = buildForecast(tasks, spi)
+  const delayedTasks = tasks.filter((task) => isDelayedTask(task))
+  const overdueTasks = tasks.filter((task) => isOverdueTask(task))
 
   return {
     tasks,
@@ -303,6 +347,8 @@ function buildScheduleReport(sourceTasks: MacroScheduleTask[], holidays: string[
     spiText: spi === null ? '-' : spi.toFixed(2),
     spiStatus: spi === null ? 'Sem PV' : spi >= 1 ? 'No prazo' : spi >= 0.85 ? 'Atenção' : 'Crítico',
     spiTone: (spi === null ? 'blue' : spi >= 1 ? 'green' : spi >= 0.85 ? 'amber' : 'red') as KpiTone,
+    delayedTasks,
+    overdueTasks,
     forecastLabel: forecast.label,
     forecastDetail: forecast.detail,
     forecastTone: forecast.tone,
@@ -319,6 +365,7 @@ function buildScheduleReport(sourceTasks: MacroScheduleTask[], holidays: string[
     milestones: tasks
       .filter((task) => task.is_milestone || task.start_date === task.end_date)
       .sort((a, b) => String(a.end_date ?? '').localeCompare(String(b.end_date ?? ''))),
+    checkpoints: buildCheckpoints(tasks),
     phaseSummaries: MACRO_PHASES.map((phase) => summarizePhase(phase, tasks, holidays)),
     squadSummaries: summarizeSquads(tasks, holidays),
   }
@@ -364,13 +411,22 @@ function taskWeight(task: MacroScheduleTask, holidays: string[]) {
 }
 
 function plannedFraction(task: MacroScheduleTask, date: string) {
-  if (!task.start_date || !task.end_date) return task.planned_pct / 100
+  const plannedNow = Math.max(0, Math.min(1, task.planned_pct / 100))
+  if (!task.start_date || !task.end_date) return plannedNow
   if (date < task.start_date) return 0
   if (date >= task.end_date) return 1
+  if (date === asOfIso) return plannedNow
+
   const start = new Date(`${task.start_date}T12:00:00`).getTime()
   const end = new Date(`${task.end_date}T12:00:00`).getTime()
   const current = new Date(`${date}T12:00:00`).getTime()
-  return Math.max(0, Math.min(1, (current - start) / Math.max(1, end - start)))
+  const today = asOf.getTime()
+
+  if (date < asOfIso) {
+    return Math.max(0, Math.min(plannedNow, plannedNow * ((current - start) / Math.max(1, today - start))))
+  }
+
+  return Math.max(plannedNow, Math.min(1, plannedNow + (1 - plannedNow) * ((current - today) / Math.max(1, end - today))))
 }
 
 function actualFraction(task: MacroScheduleTask, date: string) {
@@ -406,13 +462,13 @@ function buildForecast(tasks: MacroScheduleTask[], spi: number | null) {
 }
 
 function isCriticalTask(task: MacroScheduleTask) {
-  return !task.start_date || !task.end_date || !task.responsible || (task.end_date < asOfIso && task.real_pct < 100) || task.real_pct + 5 < task.planned_pct
+  return !task.start_date || !task.end_date || !task.responsible || isDelayedTask(task)
 }
 
 function criticalScore(task: MacroScheduleTask) {
   let score = 0
-  if (task.end_date && task.end_date < asOfIso && task.real_pct < 100) score += 4
-  if (task.real_pct + 5 < task.planned_pct) score += 3
+  if (isOverdueTask(task)) score += 4
+  if (isProgressBehind(task)) score += 3
   if (!task.responsible) score += 2
   if (!task.start_date || !task.end_date) score += 1
   return score
@@ -420,21 +476,59 @@ function criticalScore(task: MacroScheduleTask) {
 
 function criticalReason(task: MacroScheduleTask) {
   if (!task.start_date || !task.end_date) return 'Sem data'
-  if (task.end_date < asOfIso && task.real_pct < 100) return 'Vencida'
+  if (isOverdueTask(task)) return 'Vencida'
   if (!task.responsible) return 'Sem resp.'
-  if (task.real_pct + 5 < task.planned_pct) return 'Baixa execução'
+  if (isProgressBehind(task)) return 'Baixa execução'
   return 'Atenção'
 }
 
-function summarizePhase(phase: MacroSchedulePhase, tasks: MacroScheduleTask[], holidays: string[]) {
+function isOverdueTask(task: MacroScheduleTask) {
+  return Boolean(task.end_date && task.end_date < asOfIso && task.real_pct < 100)
+}
+
+function isProgressBehind(task: MacroScheduleTask) {
+  return task.planned_pct > 0 && task.real_pct + 5 < task.planned_pct
+}
+
+function isDelayedTask(task: MacroScheduleTask) {
+  return isOverdueTask(task) || isProgressBehind(task)
+}
+
+function isCheckpoint(task: MacroScheduleTask) {
+  return task.is_milestone || task.start_date === task.end_date || /go[- ]?live|cutover|quality gate|gate|marco/i.test(task.title)
+}
+
+function checkpointStatus(task: MacroScheduleTask): CheckpointSummary['status'] {
+  if (task.real_pct >= 100) return 'Concluido'
+  if (isOverdueTask(task)) return 'Vencido'
+  if (isProgressBehind(task)) return 'Atencao'
+  return 'Futuro'
+}
+
+function buildCheckpoints(tasks: MacroScheduleTask[]): CheckpointSummary[] {
+  const statusWeight: Record<CheckpointSummary['status'], number> = {
+    Vencido: 0,
+    Atencao: 1,
+    Futuro: 2,
+    Concluido: 3,
+  }
+
+  return tasks
+    .filter(isCheckpoint)
+    .map((task) => ({ task, status: checkpointStatus(task) }))
+    .sort((a, b) => statusWeight[a.status] - statusWeight[b.status] || String(a.task.end_date ?? '').localeCompare(String(b.task.end_date ?? '')))
+}
+
+function summarizePhase(phase: MacroSchedulePhase, tasks: MacroScheduleTask[], holidays: string[]): PhaseSummary {
   const phaseTasks = tasks.filter((task) => task.phase === phase)
   const weight = phaseTasks.reduce((sum, task) => sum + taskWeight(task, holidays), 0) || 1
   const ev = phaseTasks.reduce((sum, task) => sum + taskWeight(task, holidays) * task.real_pct / 100, 0)
-  const overdue = phaseTasks.filter((task) => task.end_date && task.end_date < asOfIso && task.real_pct < 100).length
   return {
     phase,
     realPct: Math.round((ev / weight) * 100),
-    overdue,
+    delayed: phaseTasks.filter(isDelayedTask).length,
+    overdue: phaseTasks.filter(isOverdueTask).length,
+    missingSchedule: phaseTasks.filter((task) => !task.start_date || !task.end_date).length,
   }
 }
 
@@ -455,9 +549,24 @@ function summarizeSquads(tasks: MacroScheduleTask[], holidays: string[]): SquadS
       pv,
       ev,
       spi: calcLineSPI(ev, pv),
-      overdue: items.filter((task) => task.end_date && task.end_date < asOfIso && task.real_pct < 100).length,
+      delayed: items.filter(isDelayedTask).length,
+      overdue: items.filter(isOverdueTask).length,
     }
-  }).sort((a, b) => b.overdue - a.overdue || (a.spi ?? 99) - (b.spi ?? 99))
+  }).sort((a, b) => b.delayed - a.delayed || (a.spi ?? 99) - (b.spi ?? 99))
+}
+
+function checkpointClass(status: CheckpointSummary['status']) {
+  if (status === 'Concluido') return 'badge-green'
+  if (status === 'Vencido') return 'badge-red'
+  if (status === 'Atencao') return 'badge-amber'
+  return 'badge-blue'
+}
+
+function checkpointLabel(status: CheckpointSummary['status']) {
+  if (status === 'Concluido') return 'Concluído'
+  if (status === 'Vencido') return 'Vencido'
+  if (status === 'Atencao') return 'Atenção'
+  return 'Futuro'
 }
 
 function emptyPoint(): CurvePoint {
