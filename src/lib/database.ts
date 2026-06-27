@@ -12,6 +12,7 @@ import type {
   ChangeRequest, CreateChangeRequestInput, UpdateChangeRequestInput,
   BillingItem, CreateBillingInput, UpdateBillingInput,
   TravelItem, CreateTravelInput, UpdateTravelInput,
+  User, Tenant, UserRole,
 } from '@/types'
 
 async function q<T>(fn: () => PromiseLike<{ data: T | null; error: unknown }>): Promise<T> {
@@ -246,4 +247,19 @@ export const travelsDB = {
   delete: (id: string) => q<null>(() =>
     supabase.from('travels').delete().eq('id', id)
   ),
+}
+
+// ── Admin ─────────────────────────────────────────────────────
+export const adminDB = {
+  listUsers: () => q<User[]>(() =>
+    supabase.from('users').select('*').order('created_at', { ascending: false })
+  ),
+  updateUser: (id: string, input: Partial<Pick<User, 'full_name' | 'role' | 'active' | 'avatar_url'>>) =>
+    q<User>(() => supabase.from('users').update(input).eq('id', id).select().single()),
+  updateUserRole: (id: string, role: UserRole) =>
+    q<User>(() => supabase.from('users').update({ role }).eq('id', id).select().single()),
+  updateUserActive: (id: string, active: boolean) =>
+    q<User>(() => supabase.from('users').update({ active }).eq('id', id).select().single()),
+  updateTenant: (id: string, input: Partial<Pick<Tenant, 'name' | 'primary_color' | 'secondary_color' | 'accent_color' | 'logo_url' | 'ai_provider' | 'ai_model'>>) =>
+    q<Tenant>(() => supabase.from('tenants').update(input).eq('id', id).select().single()),
 }

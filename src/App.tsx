@@ -24,6 +24,7 @@ import MacroSchedulePage from '@/pages/macro-schedule/MacroSchedulePage'
 import ScopeDefinitionPage from '@/pages/scope/ScopeDefinitionPage'
 import OrganizationCommunicationPage from '@/pages/organization/OrganizationCommunicationPage'
 import TemplateWorkspacePage from '@/pages/templates/TemplateWorkspacePage'
+import AdminPage from '@/pages/admin/AdminPage'
 
 // Layout
 import AppLayout from '@/components/layout/AppLayout'
@@ -97,6 +98,9 @@ export default function App() {
           <Route path="/projects/:projectId/scope" element={<ScopeDefinitionPage />} />
           <Route path="/projects/:projectId/organization" element={<OrganizationCommunicationPage />} />
           <Route path="/projects/:projectId/templates/:templateKey" element={<TemplateWorkspacePage />} />
+          <Route element={<RequireAdmin />}>
+            <Route path="/admin" element={<AdminPage />} />
+          </Route>
         </Route>
       </Route>
 
