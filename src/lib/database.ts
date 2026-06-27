@@ -254,6 +254,15 @@ export const adminDB = {
   listUsers: () => q<User[]>(() =>
     supabase.from('users').select('*').order('created_at', { ascending: false })
   ),
+  countActiveProjects: async () => {
+    const { count, error } = await supabase
+      .from('projects')
+      .select('id', { count: 'exact', head: true })
+      .eq('active', true)
+      .eq('archived', false)
+    if (error) throw error
+    return count ?? 0
+  },
   listTenants: () => q<Tenant[]>(() =>
     supabase.from('tenants').select('*').order('created_at', { ascending: false })
   ),

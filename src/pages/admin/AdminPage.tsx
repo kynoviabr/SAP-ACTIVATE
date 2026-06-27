@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { Building2, CheckCircle2, CircleDollarSign, Palette, Plus, Search, Shield, UserCheck, Users } from 'lucide-react'
+import { Building2, CheckCircle2, CircleDollarSign, FolderKanban, Palette, Plus, Search, Shield, UserCheck } from 'lucide-react'
 import { useAdmin } from '@/hooks/useAdmin'
 import { useAuthStore } from '@/store'
 import type { AIProvider, CreateTenantInput, Tenant, TenantContactInput, TenantContactType, User, UserRole } from '@/types'
@@ -235,10 +235,10 @@ export default function AdminPage() {
       ) : null}
 
       <section className="mb-5 grid gap-4 md:grid-cols-4">
-        <Kpi icon={<Users className="h-4 w-4" />} label="Usuarios" value={summary.total} />
-        <Kpi icon={<UserCheck className="h-4 w-4" />} label="Ativos" value={summary.active} />
+        <Kpi icon={<FolderKanban className="h-4 w-4" />} label="Projetos ativos" value={summary.activeProjects} />
+        <Kpi icon={<UserCheck className="h-4 w-4" />} label="Usuarios ativos" value={summary.active} />
         <Kpi icon={<Shield className="h-4 w-4" />} label="Admins" value={summary.admins} />
-        {canManageClients ? <Kpi icon={<Building2 className="h-4 w-4" />} label="Clientes" value={tenants.length} /> : null}
+        <Kpi icon={<Building2 className="h-4 w-4" />} label="Clientes" value={summary.clients} />
       </section>
 
       {canManageClients ? (

@@ -113,6 +113,13 @@ export function useAdmin() {
     staleTime: 30_000,
   })
 
+  const activeProjectsQuery = useQuery({
+    queryKey: ['admin', 'active-projects-count'],
+    queryFn: adminDB.countActiveProjects,
+    enabled: realDbEnabled,
+    staleTime: 30_000,
+  })
+
   const users = usersQuery.data ?? (isDemo ? demoState : [])
 
   const tenantsQuery = useQuery({
@@ -131,13 +138,16 @@ export function useAdmin() {
 
   const tenants = tenantsQuery.data ?? (isDemo ? demoTenantState : tenant ? [tenant] : [])
   const tenantContacts = contactsQuery.data ?? (isDemo ? demoContactState : [])
+  const activeProjects = activeProjectsQuery.data ?? (isDemo ? 1 : 0)
 
   const summary = useMemo(() => ({
     total: users.length,
     active: users.filter((user) => user.active).length,
-    admins: users.filter((user) => user.role === 'ADMIN').length,
+    admins: users.filter((user) => user.role === 'ADMIN' || user.role === 'SUPER_ADMIN').length,
     viewers: users.filter((user) => user.role === 'VIEWER').length,
-  }), [users])
+    clients: tenants.filter((item) => item.active).length,
+    activeProjects,
+  }), [activeProjects, tenants, users])
 
   const updateRole = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: UserRole }) => {
