@@ -1,10 +1,11 @@
 import { cloneElement, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  BarChart3,
   Bot,
   CalendarDays,
   CheckCircle2,
@@ -53,6 +54,7 @@ const zoomLabels = MACRO_ZOOM_LABELS
 
 export default function MacroSchedulePage() {
   const { projectId = 'local' } = useParams()
+  const navigate = useNavigate()
   const excelInputRef = useRef<HTMLInputElement>(null)
   const projectInputRef = useRef<HTMLInputElement>(null)
   const autosaveRef = useRef<number | undefined>(undefined)
@@ -388,6 +390,10 @@ export default function MacroSchedulePage() {
           <div className="mt-4 flex flex-wrap gap-2">
             <button className={`section-tab ${view === 'schedule' ? 'active' : ''}`} type="button" onClick={() => setView('schedule')}>Cronograma</button>
             <button className={`section-tab ${view === 'timeline' ? 'active' : ''}`} type="button" onClick={() => setView('timeline')}>Timeline</button>
+            <button className="btn-secondary btn-sm" type="button" onClick={() => navigate(`/projects/${projectId}/schedule-reports`)}>
+              <BarChart3 className="h-4 w-4" />
+              Relatório
+            </button>
           </div>
         </div>
 
