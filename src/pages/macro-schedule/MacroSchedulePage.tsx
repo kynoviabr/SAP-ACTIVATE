@@ -236,6 +236,17 @@ export default function MacroSchedulePage() {
     XLSX.writeFile(workbook, `cronograma-macro-${projectId}.xlsx`)
   }
 
+  async function exportPmiEvmTemplate() {
+    const XLSX = await import('xlsx')
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, buildPmiScheduleSheet(XLSX), 'Cronograma Macro')
+    XLSX.utils.book_append_sheet(workbook, buildPmiConfigSheet(XLSX), 'Config')
+    XLSX.utils.book_append_sheet(workbook, buildPmiHolidaysSheet(XLSX), 'Feriados')
+    XLSX.utils.book_append_sheet(workbook, buildPmiDictionarySheet(XLSX), 'Dicionario')
+    XLSX.utils.book_append_sheet(workbook, buildPmiListsSheet(XLSX), 'Listas')
+    XLSX.writeFile(workbook, `template-pmi-evm-cronograma-${projectId}.xlsx`)
+  }
+
   async function importExcel(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -385,6 +396,7 @@ export default function MacroSchedulePage() {
               {menu === 'import' ? (
                 <>
                   <MenuAction icon={<Download className="h-4 w-4" />} label="Baixar Excel" text="Exporta todas as colunas do cronograma." onClick={exportExcel} />
+                  <MenuAction icon={<Download className="h-4 w-4" />} label="Baixar template PMI/EVM" text="Template auditável com baseline, PV, EV, SPI e trilha de atualização." onClick={exportPmiEvmTemplate} />
                   <MenuAction icon={<FileInput className="h-4 w-4" />} label="Carga de novo cronograma" text="Excel ou CSV; substitui o cronograma atual." onClick={() => excelInputRef.current?.click()} />
                   <MenuAction icon={<Download className="h-4 w-4" />} label="Baixar MS Project XML" text="Exporta XML compatível com MS Project." onClick={exportProjectXml} />
                   <MenuAction icon={<FileInput className="h-4 w-4" />} label="Carga MS Project XML" text="XML substitui o cronograma atual." onClick={() => projectInputRef.current?.click()} />
@@ -663,6 +675,150 @@ function IconAction({ children, label, danger, onClick }: { children: React.Reac
   )
 }
 
+function buildPmiScheduleSheet(xlsx: typeof import('xlsx')) {
+  const headers = [
+    '#',
+    'WBS',
+    'Tarefa',
+    'Fase',
+    'Squad',
+    'Responsável',
+    '% Aloc',
+    'Início',
+    'Fim',
+    'Dias',
+    '% Real',
+    '% Plan.',
+    'SPI',
+    'Pred.',
+    'Horas',
+    'Marco',
+    'Nivel',
+    'EV Method',
+    'Baseline Start',
+    'Baseline Finish',
+    'Actual Start',
+    'Actual Finish',
+    'BAC',
+    'AC',
+    'PV',
+    'EV',
+    'CPI',
+    'SV',
+    'CV',
+    'Critério Aceite',
+    'Fonte Atualização',
+    'Aprovador',
+    'Data Status',
+    'Observações',
+  ]
+  const rows: unknown[][] = [
+    headers,
+    [1, '1.1', 'Planejamento do Projeto', 'Prepare', 'PMO', 'Gerente do Projeto', 100, new Date('2026-06-01T12:00:00'), new Date('2026-06-12T12:00:00'), '', 100, '', '', '', 80, 'Não', 2, 'Percent Complete', new Date('2026-06-01T12:00:00'), new Date('2026-06-12T12:00:00'), '', '', 80, 70, '', '', '', '', '', 'Plano aprovado e baseline congelada', 'Status report semanal', 'Sponsor/PMO', '', 'Linha exemplo; substituir pelos dados do projeto.'],
+    [2, '1.2', 'Marco de Kickoff', 'Prepare', 'PMO', 'Gerente do Projeto', 100, new Date('2026-06-15T12:00:00'), new Date('2026-06-15T12:00:00'), '', 0, '', '', '1', 0, 'Sim', 2, '0/100', new Date('2026-06-15T12:00:00'), new Date('2026-06-15T12:00:00'), '', '', 1, 0, '', '', '', '', '', 'Ata de kickoff assinada', 'Ata/reunião', 'Sponsor/PMO', '', 'Marco com duração zero.'],
+  ]
+
+  for (let index = 3; index <= 101; index += 1) {
+    rows.push([index - 1, '', '', '', '', '', 100, '', '', '', '', '', '', '', '', 'Não', 2, 'Percent Complete', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''])
+  }
+
+  const worksheet = xlsx.utils.aoa_to_sheet(rows)
+  worksheet['!cols'] = [
+    { wch: 5 }, { wch: 10 }, { wch: 36 }, { wch: 12 }, { wch: 16 }, { wch: 20 }, { wch: 8 },
+    { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 12 },
+    { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
+    { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 10 },
+    { wch: 10 }, { wch: 28 }, { wch: 22 }, { wch: 18 }, { wch: 12 }, { wch: 34 },
+  ]
+  worksheet['!autofilter'] = { ref: 'A1:AH101' }
+
+  for (let row = 2; row <= 101; row += 1) {
+    setFormula(worksheet, `J${row}`, `IF(OR(H${row}="",I${row}=""),"",NETWORKDAYS(H${row},I${row},'Feriados'!$A:$A))`)
+    setFormula(worksheet, `L${row}`, `IF(OR(H${row}="",I${row}=""),0,IF('Config'!$B$2<H${row},0,IF('Config'!$B$2>=I${row},100,ROUND(NETWORKDAYS(H${row},'Config'!$B$2,'Feriados'!$A:$A)/MAX(1,NETWORKDAYS(H${row},I${row},'Feriados'!$A:$A))*100,0))))`)
+    setFormula(worksheet, `M${row}`, `IF(L${row}=0,"",ROUND(K${row}/L${row},2))`)
+    setFormula(worksheet, `Y${row}`, `IF(W${row}="",O${row}*L${row}/100,W${row}*L${row}/100)`)
+    setFormula(worksheet, `Z${row}`, `IF(W${row}="",O${row}*K${row}/100,W${row}*K${row}/100)`)
+    setFormula(worksheet, `AA${row}`, `IF(X${row}=0,"",ROUND(Z${row}/X${row},2))`)
+    setFormula(worksheet, `AB${row}`, `Z${row}-Y${row}`)
+    setFormula(worksheet, `AC${row}`, `Z${row}-X${row}`)
+    setFormula(worksheet, `AG${row}`, `'Config'!$B$2`)
+  }
+
+  return worksheet
+}
+
+function buildPmiConfigSheet(xlsx: typeof import('xlsx')) {
+  const worksheet = xlsx.utils.aoa_to_sheet([
+    ['Campo', 'Valor', 'Uso'],
+    ['Status Date', new Date(), 'Data de corte para PV, SPI, SV e relatórios. Atualize antes de publicar o status report.'],
+    ['Calendário', 'BR-5x8', 'Dias úteis: segunda a sexta; feriados na aba Feriados.'],
+    ['Regra SPI', 'SPI = EV / PV', 'PV e EV usam horas ou BAC como peso, nunca alocação.'],
+    ['Regra CPI', 'CPI = EV / AC', 'Exige AC preenchido para indicador de custo.'],
+  ])
+  worksheet['!cols'] = [{ wch: 20 }, { wch: 22 }, { wch: 80 }]
+  return worksheet
+}
+
+function buildPmiHolidaysSheet(xlsx: typeof import('xlsx')) {
+  const worksheet = xlsx.utils.aoa_to_sheet([
+    ['Data', 'Feriado', 'Fonte'],
+    [new Date('2026-01-01T12:00:00'), 'Confraternização Universal', 'BR nacional'],
+    [new Date('2026-04-03T12:00:00'), 'Sexta-feira Santa', 'BR nacional'],
+    [new Date('2026-04-21T12:00:00'), 'Tiradentes', 'BR nacional'],
+    [new Date('2026-05-01T12:00:00'), 'Dia do Trabalho', 'BR nacional'],
+    [new Date('2026-09-07T12:00:00'), 'Independência do Brasil', 'BR nacional'],
+    [new Date('2026-10-12T12:00:00'), 'Nossa Senhora Aparecida', 'BR nacional'],
+    [new Date('2026-11-02T12:00:00'), 'Finados', 'BR nacional'],
+    [new Date('2026-11-15T12:00:00'), 'Proclamação da República', 'BR nacional'],
+    [new Date('2026-12-25T12:00:00'), 'Natal', 'BR nacional'],
+  ])
+  worksheet['!cols'] = [{ wch: 14 }, { wch: 34 }, { wch: 18 }]
+  return worksheet
+}
+
+function buildPmiDictionarySheet(xlsx: typeof import('xlsx')) {
+  const worksheet = xlsx.utils.aoa_to_sheet([
+    ['Campo', 'Obrigatório', 'Descrição / regra de auditoria'],
+    ['WBS', 'Sim', 'Código único da EAP/WBS. Deve refletir a hierarquia do pacote de trabalho.'],
+    ['Tarefa', 'Sim', 'Nome objetivo da entrega ou atividade. Evite verbos genéricos sem entregável.'],
+    ['Fase', 'Sim', 'Prepare, Explore, Realize, Deploy ou Run.'],
+    ['Início / Fim', 'Sim', 'Datas da baseline aprovada. Mudanças devem ser controladas via rebaseline.'],
+    ['% Real', 'Sim', 'Progresso físico aceito. Não deve ser substituído por esforço gasto.'],
+    ['% Plan.', 'Calculado', 'Calculado por dias úteis até a Status Date; pode ser sobrescrito quando houver curva planejada aprovada.'],
+    ['% Aloc', 'Não para SPI', 'Percentual de capacidade do recurso. Não entra no cálculo de SPI/PV/EV.'],
+    ['Horas', 'Sim', 'Peso de esforço quando BAC não estiver disponível.'],
+    ['BAC', 'Recomendado', 'Budget at Completion. Quando preenchido, PV/EV usam valor monetário em vez de horas.'],
+    ['AC', 'Para CPI', 'Actual Cost. Necessário para CPI e CV.'],
+    ['PV', 'Calculado', 'Planned Value: BAC ou Horas multiplicado pelo % planejado.'],
+    ['EV', 'Calculado', 'Earned Value: BAC ou Horas multiplicado pelo % real aceito.'],
+    ['SPI', 'Calculado', 'Schedule Performance Index = EV / PV.'],
+    ['CPI', 'Calculado', 'Cost Performance Index = EV / AC.'],
+    ['SV / CV', 'Calculado', 'Schedule Variance = EV - PV; Cost Variance = EV - AC.'],
+    ['Critério Aceite', 'Sim para auditoria', 'Critério objetivo para reconhecer % real/EV.'],
+    ['Fonte Atualização', 'Sim para auditoria', 'Evidência usada: ata, aceite, Jira, ServiceNow, MS Project, reunião, etc.'],
+    ['Aprovador', 'Recomendado', 'Responsável por aceitar progresso físico ou mudança de baseline.'],
+  ])
+  worksheet['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 96 }]
+  return worksheet
+}
+
+function buildPmiListsSheet(xlsx: typeof import('xlsx')) {
+  const worksheet = xlsx.utils.aoa_to_sheet([
+    ['Fases', 'EV Methods', 'Status recomendado'],
+    ['Prepare', '0/100', 'Não iniciado'],
+    ['Explore', '50/50', 'Em andamento'],
+    ['Realize', 'Percent Complete', 'Concluído'],
+    ['Deploy', 'Weighted Milestone', 'Atrasado'],
+    ['Run', 'Units Complete', 'Cancelado'],
+  ])
+  worksheet['!cols'] = [{ wch: 16 }, { wch: 22 }, { wch: 22 }]
+  return worksheet
+}
+
+function setFormula(worksheet: Record<string, unknown>, cell: string, formula: string) {
+  worksheet[cell] = { t: 'n', f: formula }
+}
+
 function taskToExcelRow(row: MacroRow, index: number, holidays: string[]) {
   const plannedEffective = effectivePlannedPct(row, todayIso(), holidays)
   return {
@@ -695,27 +851,29 @@ function excelRowToTask(row: Record<string, unknown>, index: number, projectId: 
     }
     return ''
   }
-  const start = normalizeDate(get('Início', 'Inicio', 'Start'), xlsx)
-  const end = normalizeDate(get('Fim', 'Finish', 'End'), xlsx)
+  const start = normalizeDate(get('Início', 'Inicio', 'Start', 'Baseline Start', 'Data Inicio Baseline', 'Data Início Baseline'), xlsx)
+  const end = normalizeDate(get('Fim', 'Finish', 'End', 'Baseline Finish', 'Data Fim Baseline'), xlsx)
   const milestone = String(get('Marco', 'Milestone')).toLowerCase().startsWith('s') || start === end
+  const plannedHours = Math.max(0, Number(get('Horas', 'Work', 'Planned Work Hours', 'Horas Planejadas') || 0))
+  const costBaseline = Math.max(0, Number(get('BAC', 'Budget at Completion', 'Orcamento Baseline', 'Orçamento Baseline') || 0))
   return {
     project_id: projectId,
     wbs: String(get('WBS') || `1.${index + 1}`),
-    title: String(get('Tarefa', 'Name', 'Task Name') || `Tarefa ${index + 1}`),
+    title: String(get('Tarefa', 'Name', 'Task Name', 'Nome da Tarefa') || `Tarefa ${index + 1}`),
     phase: normalizeMacroPhase(get('Fase', 'Phase')),
-    squad: String(get('Squad', 'Módulo', 'Modulo') || ''),
-    responsible: String(get('Responsável', 'Responsavel', 'Resource Names') || ''),
-    allocation_pct: clampNumber(get('% Aloc', 'Allocation'), 0, 100),
+    squad: String(get('Squad', 'Módulo', 'Modulo', 'Control Account', 'Conta de Controle') || ''),
+    responsible: String(get('Responsável', 'Responsavel', 'Resource Names', 'Owner', 'Responsavel Principal') || ''),
+    allocation_pct: clampNumber(get('% Aloc', 'Allocation', 'Alocacao %', 'Alocação %'), 0, 100),
     start_date: start || undefined,
     end_date: milestone ? start || end || undefined : end || undefined,
     is_milestone: milestone,
-    planned_pct: clampNumber(get('% Plan.', '% Plan', 'Planned'), 0, 100),
-    real_pct: clampNumber(get('% Real', 'Percent Complete', 'Progresso'), 0, 100),
+    planned_pct: clampNumber(get('% Plan.', '% Plan', 'Planned', 'PV %', '% Planejado'), 0, 100),
+    real_pct: clampNumber(get('% Real', 'Percent Complete', 'Progresso', 'Physical % Complete', 'Percentual Fisico Realizado %', 'Percentual Físico Realizado %'), 0, 100),
     predecessors: parsePredecessors(String(get('Pred.', 'Predecessors') || '')),
-    hours: Math.max(0, Number(get('Horas', 'Work') || 0)),
-    level: Math.max(1, Number(get('Nivel', 'Level') || String(get('WBS') || '').split('.').length || 2)),
+    hours: plannedHours || costBaseline,
+    level: Math.max(1, Number(get('Nivel', 'Level', 'Outline Level') || String(get('WBS') || '').split('.').length || 2)),
     sort_order: index + 1,
-    notes: '',
+    notes: String(get('Observações', 'Observacoes', 'Notes') || ''),
   }
 }
 
