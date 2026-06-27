@@ -212,7 +212,9 @@ export default function AdminPage() {
           <span className="badge badge-blue">Administracao</span>
           <h1 className="mt-3 text-2xl font-bold text-text-primary">Console administrativo</h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Clientes, tenants, usuarios, identidade visual e parametros operacionais do portal.
+            {canManageClients
+              ? 'Clientes, tenants, usuarios, identidade visual e parametros operacionais do portal.'
+              : 'Usuarios, identidade visual e parametros operacionais do portal.'}
           </p>
         </div>
         <div className="card2 min-w-[220px]">
@@ -228,7 +230,7 @@ export default function AdminPage() {
 
       {isDemo ? (
         <div className="mb-5 rounded-[10px] border border-[rgba(245,158,11,0.2)] bg-[rgba(245,158,11,0.1)] px-4 py-3 text-sm text-[#FCD34D]">
-          Modo demo: alteracoes de usuarios, clientes e tenant sao simuladas nesta sessao.
+          Modo demo: alteracoes de usuarios e tenant sao simuladas nesta sessao.
         </div>
       ) : null}
 
@@ -236,7 +238,7 @@ export default function AdminPage() {
         <Kpi icon={<Users className="h-4 w-4" />} label="Usuarios" value={summary.total} />
         <Kpi icon={<UserCheck className="h-4 w-4" />} label="Ativos" value={summary.active} />
         <Kpi icon={<Shield className="h-4 w-4" />} label="Admins" value={summary.admins} />
-        <Kpi icon={<Building2 className="h-4 w-4" />} label="Clientes" value={tenants.length} />
+        {canManageClients ? <Kpi icon={<Building2 className="h-4 w-4" />} label="Clientes" value={tenants.length} /> : null}
       </section>
 
       {canManageClients ? (
