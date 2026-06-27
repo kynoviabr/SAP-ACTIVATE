@@ -3,19 +3,15 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   AlertTriangle,
   CalendarClock,
-  CheckCircle2,
   Download,
   Gauge,
   HelpCircle,
   Milestone,
   RefreshCw,
-  TrendingUp,
 } from 'lucide-react'
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -34,6 +30,7 @@ import { buildAuditScheduleCurve, snapshotToCurvePoint } from '@/lib/scheduleGov
 import { formatDate } from '@/lib/utils'
 
 type KpiTone = 'blue' | 'green' | 'amber' | 'red'
+type DetailPanel = 'delayed' | 'next7' | null
 
 export default function ScheduleReportsPage() {
   const { projectId } = useParams()
@@ -41,6 +38,7 @@ export default function ScheduleReportsPage() {
   const projectQuery = useProject(projectId)
   const { tasks, holidayDates, isLoading, forceSync, lastSyncedAt } = useMacroSchedule(projectId)
   const { activeBaseline, baselineTasks, snapshots, isLoading: governanceLoading } = useScheduleGovernance(projectId)
+  const [detailPanel, setDetailPanel] = useState<DetailPanel>(null)
 
   const report = useMemo(() => buildScheduleAnalytics(tasks, holidayDates), [holidayDates, tasks])
   const auditCurve = useMemo(() => buildAuditScheduleCurve(baselineTasks, snapshots, holidayDates), [baselineTasks, holidayDates, snapshots])
@@ -58,29 +56,30 @@ export default function ScheduleReportsPage() {
     realPct: latestSnapshot?.real_pct ?? report.realPct,
     spi: latestSnapshot?.spi ?? report.spi,
     spiText: latestSnapshot ? latestSnapshot.spi?.toFixed(2) ?? '-' : report.spiText,
-    spiStatus: latestSnapshot ? (latestSnapshot.spi === null || latestSnapshot.spi === undefined ? 'Sem PV' : latestSnapshot.spi >= 1 ? 'No prazo' : latestSnapshot.spi >= 0.85 ? 'Atenção' : 'Crítico') : report.spiStatus,
+    spiStatus: latestSnapshot ? (latestSnapshot.spi === null || latestSnapshot.spi === undefined ? 'Sem planejado' : latestSnapshot.spi >= 1 ? 'No prazo' : latestSnapshot.spi >= 0.85 ? 'Atenção' : 'Crítico') : report.spiStatus,
     spiTone: latestSnapshot ? (latestSnapshot.spi === null || latestSnapshot.spi === undefined ? 'blue' as const : latestSnapshot.spi >= 1 ? 'green' as const : latestSnapshot.spi >= 0.85 ? 'amber' as const : 'red' as const) : report.spiTone,
     delayedCount: latestSnapshot?.delayed_count ?? report.delayedTasks.length,
     forecastLabel: report.forecastLabel,
     forecastDetail: hasAuditSnapshots ? 'Usa último corte salvo' : report.forecastDetail,
     forecastTone: report.forecastTone,
-    evmBars: [
-      { name: 'BAC', hours: Math.round(latestSnapshot?.total_weight ?? report.totalHours) },
-      { name: 'PV', hours: Math.round(latestSnapshot?.pv ?? report.pv) },
-      { name: 'EV', hours: Math.round(latestSnapshot?.ev ?? report.ev) },
-      { name: 'SV', hours: Math.round(latestSnapshot ? latestSnapshot.ev - latestSnapshot.pv : report.sv) },
-    ],
   }
+  const delayedTasks = report.delayedTasks
+  const nextSevenTasks = useMemo(() => {
+    const start = display.asOfIso
+    const end = addDaysIso(start, 7)
+    return report.tasks
+      .filter((task) => task.real_pct < 100 && ((task.start_date && task.start_date >= start && task.start_date <= end) || (task.end_date && task.end_date >= start && task.end_date <= end)))
+      .sort((a, b) => String(a.start_date ?? a.end_date ?? '').localeCompare(String(b.start_date ?? b.end_date ?? '')))
+      .slice(0, 30)
+  }, [display.asOfIso, report.tasks])
   const project = projectQuery.data
 
   function exportCsv() {
-    const header = ['Data', 'Planejado %', 'Realizado %', 'PV horas', 'EV horas', 'SPI']
+    const header = ['Data', 'Planejado %', 'Realizado %', 'SPI']
     const rows = curveData.map((point) => [
       point.date,
       point.planned,
       point.realized,
-      point.pv,
-      point.ev,
       point.spi ?? '',
     ])
     const csv = [header, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\n')
@@ -100,7 +99,7 @@ export default function ScheduleReportsPage() {
       <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-brand-600">Relatórios operacionais</p>
-          <h1 className="mt-1 text-2xl font-bold text-text-primary">Cronograma, SPI e EVM</h1>
+          <h1 className="mt-1 text-2xl font-bold text-text-primary">Cronograma e SPI</h1>
           <p className="mt-1 text-sm text-text-secondary">
             {project?.name ?? 'Projeto'} - análise gerada a partir do Cronograma Macro em {formatDate(display.asOfIso)}.
           </p>
@@ -134,13 +133,24 @@ export default function ScheduleReportsPage() {
       </header>
 
       <section className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <Kpi title="SPI" value={display.spiText} detail={display.spiStatus} icon={<Gauge className="h-5 w-5" />} tone={display.spiTone} info="Schedule Performance Index. Em modo auditável, usa EV/PV da última medição de corte salva contra a baseline congelada. Abaixo de 1 indica atraso; acima de 1 indica avanço sobre o planejado." />
-        <Kpi title="PV" value={`${display.pv.toFixed(0)}h`} detail={`${display.plannedPct.toFixed(1)}% planejado`} icon={<TrendingUp className="h-5 w-5" />} info="Planned Value em horas ponderadas. Com baseline, vem do snapshot da data de corte; sem snapshot, é uma visão operacional derivada das datas atuais." />
-        <Kpi title="EV" value={`${display.ev.toFixed(0)}h`} detail={`${display.realPct.toFixed(1)}% realizado`} icon={<CheckCircle2 className="h-5 w-5" />} info="Earned Value em horas ponderadas. Com baseline, usa % Real medido na data de corte e o peso congelado da baseline." />
-        <Kpi title="SV" value={`${display.sv >= 0 ? '+' : ''}${display.sv.toFixed(0)}h`} detail={display.sv >= 0 ? 'Adiantado' : 'Atrasado'} icon={<AlertTriangle className="h-5 w-5" />} tone={display.sv >= 0 ? 'green' : 'red'} info="Schedule Variance. Diferença entre EV e PV na data de corte. Valor negativo mostra déficit de execução em horas." />
-        <Kpi title="Atrasos" value={String(display.delayedCount)} detail={hasAuditSnapshots ? 'no último corte' : `${report.overdueTasks.length} vencida(s)`} icon={<AlertTriangle className="h-5 w-5" />} tone={display.delayedCount ? 'red' : 'green'} info="Com medições salvas, conta tarefas cujo % Real ficou abaixo do planejado no snapshot de corte. Sem snapshot, usa a visão operacional atual." />
+        <Kpi title="SPI" value={display.spiText} detail={display.spiStatus} icon={<Gauge className="h-5 w-5" />} tone={display.spiTone} info="Schedule Performance Index. Em modo auditável, compara o realizado ponderado com o planejado ponderado da última medição de corte contra a baseline congelada. Abaixo de 1 indica atraso; acima de 1 indica avanço sobre o planejado." />
+        <Kpi title="Planejado" value={`${display.plannedPct.toFixed(1)}%`} detail={`corte ${formatDate(display.asOfIso)}`} icon={<CalendarClock className="h-5 w-5" />} info="Percentual planejado acumulado na data de corte. Nesta fase, mostramos percentual, não PV monetário ou em horas." />
+        <Kpi title="Realizado" value={`${display.realPct.toFixed(1)}%`} detail={hasAuditSnapshots ? 'medição salva' : 'visão atual'} icon={<Gauge className="h-5 w-5" />} tone={display.realPct >= display.plannedPct ? 'green' : 'amber'} info="Percentual realizado acumulado na data de corte. Deve vir de medição oficial, não de projeção futura." />
+        <Kpi title="Atrasos" value={String(display.delayedCount)} detail={hasAuditSnapshots ? 'no último corte' : `${report.overdueTasks.length} vencida(s)`} icon={<AlertTriangle className="h-5 w-5" />} tone={display.delayedCount ? 'red' : 'green'} info="Com medições salvas, conta tarefas cujo % Real ficou abaixo do planejado no snapshot de corte. Sem snapshot, usa a visão operacional atual." actionLabel="Listar" onAction={() => setDetailPanel(detailPanel === 'delayed' ? null : 'delayed')} />
+        <Kpi title="Próximos 7 dias" value={String(nextSevenTasks.length)} detail="tarefas/marcos" icon={<CalendarClock className="h-5 w-5" />} tone={nextSevenTasks.length ? 'blue' : 'green'} info="Lista tarefas não concluídas com início ou fim nos próximos sete dias a partir da data de corte." actionLabel="Listar" onAction={() => setDetailPanel(detailPanel === 'next7' ? null : 'next7')} />
         <Kpi title="Forecast" value={display.forecastLabel} detail={display.forecastDetail} icon={<CalendarClock className="h-5 w-5" />} tone={display.forecastTone} info="Projeção simples da data final baseada no SPI atual. Para auditoria, use como tendência gerencial, não como dado histórico." />
       </section>
+
+      {detailPanel ? (
+        <TaskListPanel
+          title={detailPanel === 'delayed' ? 'Tarefas em atraso' : 'Tarefas dos próximos 7 dias'}
+          subtitle={detailPanel === 'delayed' ? 'Itens com execução abaixo do planejado ou vencidos.' : `Janela de ${formatDate(display.asOfIso)} a ${formatDate(addDaysIso(display.asOfIso, 7))}.`}
+          tasks={detailPanel === 'delayed' ? delayedTasks : nextSevenTasks}
+          asOfIso={display.asOfIso}
+          emptyText={detailPanel === 'delayed' ? 'Nenhuma tarefa em atraso encontrada.' : 'Nenhuma tarefa prevista para os próximos sete dias.'}
+          onClose={() => setDetailPanel(null)}
+        />
+      ) : null}
 
       <ScheduleCurveCard
         data={curveData}
@@ -149,7 +159,7 @@ export default function ScheduleReportsPage() {
         scopeLabel={hasAuditSnapshots ? 'baseline + cortes salvos' : 'visão operacional atual'}
       />
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr]">
+      <section className="mt-5">
         <ChartCard title={hasAuditSnapshots ? 'SPI por corte salvo' : 'SPI operacional'} badge={display.spiText}>
           <ResponsiveContainer width="100%" height={330}>
             <AreaChart data={spiData} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
@@ -160,18 +170,6 @@ export default function ScheduleReportsPage() {
               <Area type="monotone" dataKey="spi" name="SPI" fill="#F59E0B" fillOpacity={0.16} stroke="#F59E0B" strokeWidth={3} />
               <Line type="monotone" dataKey="baseline" name="Referência" stroke="#ef4444" strokeDasharray="4 4" dot={false} />
             </AreaChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard title="EVM em horas ponderadas" badge="PV / EV">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={display.evmBars} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke="#2e3460" strokeDasharray="3 3" />
-              <XAxis dataKey="name" stroke="#9ca3af" tick={{ fontSize: 11 }} />
-              <YAxis stroke="#9ca3af" tick={{ fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: '#1a1f3a', border: '1px solid #2e3460', borderRadius: 8 }} />
-              <Bar dataKey="hours" name="Horas" fill="#3B4FE8" radius={[6, 6, 0, 0]} />
-            </BarChart>
           </ResponsiveContainer>
         </ChartCard>
       </section>
@@ -304,7 +302,7 @@ export default function ScheduleReportsPage() {
 
       <footer className="mt-4 flex flex-wrap items-center gap-3 text-xs text-text-muted">
         <span>Última sincronização: {lastSyncedAt ? lastSyncedAt.toLocaleString('pt-BR') : 'local'}</span>
-        <span>PV/EV usam Peso (h)/Horas por tarefa; se vazio, fallback = dias úteis x 8. Para EVM monetário completo, preencher BAC/AC no template PMI/EVM.</span>
+        <span>Fase 1 do relatório: foco em SPI, Curva-S, atrasos e próximas tarefas. Indicadores EVM completos ficam para uma próxima etapa.</span>
         {isLoading || projectQuery.isLoading || governanceLoading ? <span>Carregando indicadores...</span> : null}
       </footer>
     </div>
@@ -323,6 +321,69 @@ function checkpointLabel(status: CheckpointSummary['status']) {
   if (status === 'Vencido') return 'Vencido'
   if (status === 'Atencao') return 'Atenção'
   return 'Futuro'
+}
+
+function TaskListPanel({
+  title,
+  subtitle,
+  tasks,
+  asOfIso,
+  emptyText,
+  onClose,
+}: {
+  title: string
+  subtitle: string
+  tasks: ReturnType<typeof buildScheduleAnalytics>['tasks']
+  asOfIso: string
+  emptyText: string
+  onClose: () => void
+}) {
+  return (
+    <section className="card mb-5 overflow-hidden p-0">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border p-5">
+        <div>
+          <h2 className="text-lg font-bold text-text-primary">{title}</h2>
+          <p className="mt-1 text-xs text-text-muted">{subtitle}</p>
+        </div>
+        <button className="btn-secondary btn-sm" type="button" onClick={onClose}>Fechar</button>
+      </div>
+      <div className="overflow-auto">
+        <table className="data-table min-w-[980px]">
+          <thead>
+            <tr>
+              <th>WBS</th>
+              <th>Tarefa</th>
+              <th>Fase</th>
+              <th>Squad</th>
+              <th>Responsável</th>
+              <th>Início</th>
+              <th>Fim</th>
+              <th>% Plan.</th>
+              <th>% Real</th>
+              <th>Motivo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tasks.map((task) => (
+              <tr key={task.id}>
+                <td><span className="wbs-badge">{task.wbs}</span></td>
+                <td className="text-text-primary">{task.title}</td>
+                <td>{task.phase}</td>
+                <td>{task.squad || '-'}</td>
+                <td>{task.responsible || '-'}</td>
+                <td>{formatDate(task.start_date)}</td>
+                <td>{formatDate(task.end_date)}</td>
+                <td>{task.planned_pct}%</td>
+                <td>{task.real_pct}%</td>
+                <td><span className={task.end_date && task.end_date < asOfIso && task.real_pct < 100 ? 'badge badge-red' : 'badge badge-blue'}>{criticalReason(task, asOfIso)}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!tasks.length ? <div className="p-6 text-sm text-text-secondary">{emptyText}</div> : null}
+      </div>
+    </section>
+  )
 }
 
 function ScheduleCurveCard({
@@ -416,6 +477,8 @@ function Kpi({
   detail,
   icon,
   info,
+  actionLabel,
+  onAction,
   tone = 'blue',
 }: {
   title: string
@@ -423,6 +486,8 @@ function Kpi({
   detail: string
   icon: ReactNode
   info: string
+  actionLabel?: string
+  onAction?: () => void
   tone?: KpiTone
 }) {
   const [open, setOpen] = useState(false)
@@ -454,8 +519,19 @@ function Kpi({
           {info}
         </div>
       ) : null}
+      {onAction ? (
+        <button className="btn-secondary btn-sm mt-3 w-full justify-center" type="button" onClick={onAction}>
+          {actionLabel ?? 'Abrir'}
+        </button>
+      ) : null}
     </article>
   )
+}
+
+function addDaysIso(value: string, days: number) {
+  const date = new Date(`${value}T12:00:00`)
+  date.setDate(date.getDate() + days)
+  return date.toISOString().slice(0, 10)
 }
 
 function formatAxisDate(value: string) {
