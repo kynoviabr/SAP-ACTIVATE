@@ -41,6 +41,7 @@ export default function ConfigurePage() {
   const tenant = useAuthStore((state) => state.tenant)
   const user = useAuthStore((state) => state.user)
   const { createProject, setActiveProject } = useProjects()
+  const isDemo = user?.id === 'demo-user'
   const [step, setStep] = useState(0)
   const [modules, setModules] = useState<string[]>(['FI', 'CO'])
   const [error, setError] = useState<string | null>(null)
@@ -150,7 +151,7 @@ export default function ConfigurePage() {
         created_by: user?.id,
       }
       const created = await createProject.mutateAsync(input)
-      await tasksDB.bulkInsert(buildActivateTaskInputs(created.id))
+      if (!isDemo) await tasksDB.bulkInsert(buildActivateTaskInputs(created.id))
       const validMembers = members
         .filter((member) => member.full_name.trim() && member.email.trim())
         .map((member): ProjectMemberInput => ({
@@ -165,8 +166,8 @@ export default function ConfigurePage() {
           company: member.company.trim() || undefined,
           active: true,
         }))
-      if (validMembers.length) await membersDB.bulkInsert(validMembers)
-      if (project.kickoff_date || project.kickoff_location || project.objective) {
+      if (!isDemo && validMembers.length) await membersDB.bulkInsert(validMembers)
+      if (!isDemo && (project.kickoff_date || project.kickoff_location || project.objective)) {
         await kickoffDB.upsert({
           tenant_id: tenant.id,
           project_id: created.id,

@@ -120,7 +120,9 @@ export function useAdmin() {
     staleTime: 30_000,
   })
 
-  const users = usersQuery.data ?? (isDemo ? demoState : [])
+  const users = usersQuery.data ?? (isDemo ? demoState.map((item) => (
+    item.id === currentUser?.id ? { ...item, full_name: currentUser.full_name, email: currentUser.email, role: currentUser.role } : item
+  )) : [])
 
   const tenantsQuery = useQuery({
     queryKey: ['admin', 'tenants'],

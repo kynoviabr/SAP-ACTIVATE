@@ -74,11 +74,15 @@ export default function AuthPage() {
     setError(null)
     setSuccess(null)
     if (data.email === 'demo@sap.local' && data.password === 'demo1234') {
-      handleDemoLogin()
+      handleDemoLogin('ADMIN')
+      return
+    }
+    if (data.email === 'super@sap.local' && data.password === 'super1234') {
+      handleDemoLogin('SUPER_ADMIN')
       return
     }
     if (!isSupabaseConfigured) {
-      setError('Login real indisponível: configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env.local. Use demo@sap.local / demo1234 enquanto isso.')
+      setError('Login real indisponível: configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env.local. Use demo@sap.local / demo1234 ou super@sap.local / super1234 enquanto isso.')
       return
     }
     await login(data.email, data.password)
@@ -86,8 +90,9 @@ export default function AuthPage() {
     if (err) setError(err)
   }
 
-  const handleDemoLogin = () => {
+  const handleDemoLogin = (role: 'ADMIN' | 'SUPER_ADMIN' = 'ADMIN') => {
     const now = new Date().toISOString()
+    const isSuper = role === 'SUPER_ADMIN'
     const demoProject: Project = {
       id: 'demo-project',
       tenant_id: 'demo-tenant',
@@ -95,7 +100,7 @@ export default function AuthPage() {
       updated_at: now,
       name: 'Projeto Demo SAP Activate',
       client: 'Cliente Demo',
-      project_manager: 'Usuário Demo',
+      project_manager: isSuper ? 'Super Admin Kynovia' : 'Usuário Demo',
       sponsor: 'Sponsor Demo',
       sponsor_email: 'sponsor@sap.local',
       objective: 'Implantação SAP S/4HANA com metodologia SAP Activate.',
@@ -135,9 +140,9 @@ export default function AuthPage() {
     setUser({
       id: 'demo-user',
       tenant_id: 'demo-tenant',
-      full_name: 'Usuário Demo',
-      email: 'demo@sap.local',
-      role: 'ADMIN',
+      full_name: isSuper ? 'Super Admin Kynovia' : 'Usuário Demo',
+      email: isSuper ? 'super@sap.local' : 'demo@sap.local',
+      role,
       active: true,
       created_at: now,
     } as any)
@@ -321,10 +326,18 @@ export default function AuthPage() {
               <button
                 type="button"
                 className="flex w-full items-center justify-center gap-2 rounded-[8px] border border-dashed border-[#D4D4D8] bg-transparent p-2.5 text-[13.5px] font-medium tracking-[-0.1px] text-[#71717A] transition hover:border-[#3B82F6] hover:bg-[rgba(37,99,235,0.04)] hover:text-[#2563EB]"
-                onClick={handleDemoLogin}
+                onClick={() => handleDemoLogin('ADMIN')}
               >
                 <PlayCircle className="h-3.5 w-3.5" />
                 Entrar em modo demo
+              </button>
+              <button
+                type="button"
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-[8px] border border-[#BFDBFE] bg-[rgba(37,99,235,0.06)] p-2.5 text-[13.5px] font-semibold tracking-[-0.1px] text-[#1D4ED8] transition hover:border-[#2563EB] hover:bg-[rgba(37,99,235,0.10)]"
+                onClick={() => handleDemoLogin('SUPER_ADMIN')}
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                Entrar como Super Admin
               </button>
               <div className="mt-2 overflow-hidden rounded-[8px] border border-[#E4E4E7] bg-white">
                 <div className="flex items-center gap-2 border-b border-[#E4E4E7] bg-[#F4F4F5] px-3 py-2">
@@ -332,7 +345,8 @@ export default function AuthPage() {
                   <span className="font-mono text-[10.5px] uppercase tracking-[0.05em] text-[#A1A1AA]">Credenciais de demonstração</span>
                 </div>
                 <div className="px-3 py-2 font-mono text-[11.5px] tracking-[0.03em] text-[#71717A]">
-                  <span className="font-medium text-[#2563EB]">demo@sap.local</span> &nbsp;/&nbsp; <span className="font-medium text-[#2563EB]">demo1234</span>
+                  <div><span className="font-medium text-[#2563EB]">demo@sap.local</span> &nbsp;/&nbsp; <span className="font-medium text-[#2563EB]">demo1234</span></div>
+                  <div><span className="font-medium text-[#2563EB]">super@sap.local</span> &nbsp;/&nbsp; <span className="font-medium text-[#2563EB]">super1234</span></div>
                 </div>
               </div>
             </form>

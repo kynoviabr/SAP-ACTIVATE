@@ -68,17 +68,36 @@ export function useProjects() {
   const projects = query.data ?? offlineProjects
 
   const createMutation = useMutation({
-    mutationFn: (input: CreateProjectInput) => projectsDB.create(input),
+    mutationFn: async (input: CreateProjectInput) => {
+      if (realDbEnabled) return projectsDB.create(input)
+      const now = new Date().toISOString()
+      return {
+        id: `demo-project-${Date.now()}`,
+        tenant_id: user?.tenant_id ?? 'demo-tenant',
+        created_at: now,
+        updated_at: now,
+        spi: 1,
+        cpi: 1,
+        status: 'verde',
+        ...input,
+      } as Project
+    },
     onSuccess: (project) => {
+      if (!realDbEnabled) setProjects([project, ...projects])
       setActiveProject(project)
       qc.invalidateQueries({ queryKey: ['projects'] })
     },
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdateProjectInput }) =>
-      projectsDB.update(id, input),
+    mutationFn: async ({ id, input }: { id: string; input: UpdateProjectInput }) => {
+      if (realDbEnabled) return projectsDB.update(id, input)
+      const current = projects.find((project) => project.id === id) ?? activeProject
+      if (!current) throw new Error('Projeto não encontrado.')
+      return { ...current, ...input, updated_at: new Date().toISOString() } as Project
+    },
     onSuccess: (project) => {
+      if (!realDbEnabled) setProjects(projects.map((item) => item.id === project.id ? project : item))
       setActiveProject(project)
       qc.invalidateQueries({ queryKey: ['projects'] })
       qc.invalidateQueries({ queryKey: ['project', project.id] })
@@ -86,8 +105,16 @@ export function useProjects() {
   })
 
   const archiveMutation = useMutation({
-    mutationFn: (id: string) => projectsDB.archive(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+    mutationFn: async (id: string) => {
+      if (realDbEnabled) return projectsDB.archive(id)
+      const current = projects.find((project) => project.id === id)
+      if (!current) throw new Error('Projeto não encontrado.')
+      return { ...current, archived: true, active: false, updated_at: new Date().toISOString() } as Project
+    },
+    onSuccess: (project) => {
+      if (!realDbEnabled) setProjects(projects.map((item) => item.id === project.id ? project : item))
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
   })
 
   return {
@@ -105,10 +132,17 @@ export function useProjects() {
 }
 
 export function useProject(projectId?: string) {
+  const user = useAuthStore((s) => s.user)
+  const activeProject = useProjectStore((s) => s.activeProject)
+  const storeProjects = useProjectStore((s) => s.projects)
+  const hasSupabaseEnv = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY)
+  const isDemo = user?.id === 'demo-user'
+  const realDbEnabled = hasSupabaseEnv && !isDemo
+  const localProject = storeProjects.find((project) => project.id === projectId) ?? (activeProject?.id === projectId ? activeProject : undefined)
   return useQuery<Project>({
     queryKey: ['project', projectId],
-    queryFn: () => projectsDB.get(projectId!),
-    enabled: Boolean(projectId),
+    queryFn: () => realDbEnabled ? projectsDB.get(projectId!) : Promise.resolve(localProject as Project),
+    enabled: Boolean(projectId) && (realDbEnabled || Boolean(localProject)),
     staleTime: 60_000,
   })
 }
