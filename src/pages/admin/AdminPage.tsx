@@ -90,7 +90,7 @@ export default function AdminPage() {
   const [clientDraft, setClientDraft] = useState<CreateTenantInput>(initialClient)
   const [contactsDraft, setContactsDraft] = useState<ContactDraft[]>(initialContacts)
   const [formError, setFormError] = useState('')
-  const canManageClients = isPlatformAdmin || isDemo
+  const canManageClients = isPlatformAdmin
   const [tenantDraft, setTenantDraft] = useState<Partial<Tenant>>({})
 
   useEffect(() => {
