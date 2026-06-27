@@ -242,9 +242,12 @@ export default function AuthPage() {
             </div>
 
             <div className="mt-7 flex flex-col gap-[7px]">
-              <PhaseRow color="#3B82F6" shadow="rgba(59,130,246,.55)" name="Discover & Prepare" tag="Fase 1" />
-              <PhaseRow color="#10B981" shadow="rgba(16,185,129,.55)" name="Explore & Realize" tag="Fase 2-3" />
-              <PhaseRow color="#F59E0B" shadow="rgba(245,158,11,.55)" name="Deploy & Run" tag="Fase 4-5" />
+              <PhaseRow color="#3B82F6" shadow="rgba(59,130,246,.55)" name="Discover" tag="Fase 1" />
+              <PhaseRow color="#10B981" shadow="rgba(16,185,129,.55)" name="Prepare" tag="Fase 2" />
+              <PhaseRow color="#F59E0B" shadow="rgba(245,158,11,.55)" name="Explore" tag="Fase 3" />
+              <PhaseRow color="#8B5CF6" shadow="rgba(139,92,246,.55)" name="Realize" tag="Fase 4" />
+              <PhaseRow color="#EC4899" shadow="rgba(236,72,153,.50)" name="Deploy" tag="Fase 5" />
+              <PhaseRow color="#60A5FA" shadow="rgba(96,165,250,.50)" name="Run" tag="Fase 6" />
             </div>
           </div>
 
