@@ -52,6 +52,37 @@ export function countBusinessDays(start?: string, end?: string, holidays: string
   return days
 }
 
+export function todayIso() {
+  const local = new Date()
+  local.setMinutes(local.getMinutes() - local.getTimezoneOffset())
+  return local.toISOString().slice(0, 10)
+}
+
+export function derivePlannedPctByDate(
+  task: Pick<EditableMacroTask, 'start_date' | 'end_date' | 'is_milestone'>,
+  date = todayIso(),
+  holidays: string[] = []
+) {
+  if (!task.start_date || !task.end_date) return 0
+  if (date < task.start_date) return 0
+  if (task.is_milestone || task.start_date === task.end_date) return date >= task.start_date ? 100 : 0
+  if (date >= task.end_date) return 100
+
+  const totalDays = countBusinessDays(task.start_date, task.end_date, holidays)
+  const elapsedDays = countBusinessDays(task.start_date, date, holidays)
+  if (!totalDays) return 0
+  return clampNumber(Math.round((elapsedDays / totalDays) * 100), 0, 100)
+}
+
+export function effectivePlannedPct(
+  task: Pick<EditableMacroTask, 'planned_pct' | 'start_date' | 'end_date' | 'is_milestone'>,
+  date = todayIso(),
+  holidays: string[] = []
+) {
+  const explicit = clampNumber(task.planned_pct, 0, 100)
+  return explicit > 0 ? explicit : derivePlannedPctByDate(task, date, holidays)
+}
+
 export function sortMacroTasks<T extends Pick<EditableMacroTask, 'sort_order' | 'wbs'>>(tasks: T[]) {
   return tasks.slice().sort((a, b) => a.sort_order - b.sort_order || a.wbs.localeCompare(b.wbs, 'pt-BR', { numeric: true }))
 }

@@ -2,6 +2,8 @@ import {
   MACRO_PHASES,
   calcLineSPI,
   countBusinessDays,
+  derivePlannedPctByDate,
+  effectivePlannedPct,
   sortMacroTasks,
 } from '@/lib/macroSchedule'
 import type { MacroSchedulePhase, MacroScheduleTask, PhaseNumber, ProjectStatus, Task } from '@/types'
@@ -86,7 +88,7 @@ export function buildScheduleAnalytics(sourceTasks: MacroScheduleTask[], holiday
   const plannedPct = Math.round((pv / totalHours) * 100)
   const realPct = Math.round((ev / totalHours) * 100)
   const forecast = buildForecast(tasks, spi, asOfIso)
-  const delayedTasks = tasks.filter((task) => isDelayedTask(task, asOfIso))
+  const delayedTasks = tasks.filter((task) => isDelayedTask(task, asOfIso, holidays))
   const overdueTasks = tasks.filter((task) => isOverdueTask(task, asOfIso))
 
   return {
@@ -116,13 +118,13 @@ export function buildScheduleAnalytics(sourceTasks: MacroScheduleTask[], holiday
       { name: 'SV', hours: Math.round(sv) },
     ],
     criticalTasks: tasks
-      .filter((task) => isCriticalTask(task, asOfIso))
-      .sort((a, b) => criticalScore(b, asOfIso) - criticalScore(a, asOfIso))
+      .filter((task) => isCriticalTask(task, asOfIso, holidays))
+      .sort((a, b) => criticalScore(b, asOfIso, holidays) - criticalScore(a, asOfIso, holidays))
       .slice(0, 12),
     milestones: tasks
       .filter((task) => task.is_milestone || task.start_date === task.end_date)
       .sort((a, b) => String(a.end_date ?? '').localeCompare(String(b.end_date ?? ''))),
-    checkpoints: buildCheckpoints(tasks, asOfIso),
+    checkpoints: buildCheckpoints(tasks, asOfIso, holidays),
     phaseSummaries: MACRO_PHASES.map((phase) => summarizePhase(phase, tasks, holidays, asOfIso)),
     squadSummaries: summarizeSquads(tasks, holidays, asOfIso),
   }
@@ -146,7 +148,7 @@ export function criticalReason(task: MacroScheduleTask, asOfIso = toLocalIsoDate
   if (!task.start_date || !task.end_date) return 'Sem data'
   if (isOverdueTask(task, asOfIso)) return 'Vencida'
   if (!task.responsible) return 'Sem resp.'
-  if (isProgressBehind(task)) return 'Baixa execução'
+  if (isProgressBehind(task, asOfIso)) return 'Baixa execução'
   return 'Atenção'
 }
 
@@ -200,7 +202,7 @@ function buildCurve(tasks: MacroScheduleTask[], holidays: string[], totalHours: 
 }
 
 function buildCurvePoint(tasks: MacroScheduleTask[], holidays: string[], totalHours: number, date: string, asOf: Date): ScheduleCurvePoint {
-  const pv = tasks.reduce((sum, task) => sum + taskWeight(task, holidays) * plannedFraction(task, date, asOf), 0)
+  const pv = tasks.reduce((sum, task) => sum + taskWeight(task, holidays) * plannedFraction(task, date, asOf, holidays), 0)
   const ev = tasks.reduce((sum, task) => sum + taskWeight(task, holidays) * actualFraction(task, date, asOf), 0)
   return {
     date,
@@ -234,13 +236,15 @@ function taskWeight(task: MacroScheduleTask, holidays: string[]) {
   return Math.max(1, Number(task.hours || 0) || countBusinessDays(task.start_date, task.end_date, holidays) * 8 || 1)
 }
 
-function plannedFraction(task: MacroScheduleTask, date: string, asOf: Date) {
+function plannedFraction(task: MacroScheduleTask, date: string, asOf: Date, holidays: string[]) {
   const asOfIso = toLocalIsoDate(asOf)
-  const plannedNow = Math.max(0, Math.min(1, task.planned_pct / 100))
+  const plannedNow = Math.max(0, Math.min(1, effectivePlannedPct(task, asOfIso, holidays) / 100))
+  const plannedAtDate = Math.max(0, Math.min(1, derivePlannedPctByDate(task, date, holidays) / 100))
   if (!task.start_date || !task.end_date) return plannedNow
   if (date < task.start_date) return 0
   if (date >= task.end_date) return 1
   if (date === asOfIso) return plannedNow
+  if (!task.planned_pct) return plannedAtDate
 
   const start = new Date(`${task.start_date}T12:00:00`).getTime()
   const end = new Date(`${task.end_date}T12:00:00`).getTime()
@@ -283,14 +287,14 @@ function buildForecast(tasks: MacroScheduleTask[], spi: number | null, asOfIso: 
   }
 }
 
-function isCriticalTask(task: MacroScheduleTask, asOfIso: string) {
-  return !task.start_date || !task.end_date || !task.responsible || isDelayedTask(task, asOfIso)
+function isCriticalTask(task: MacroScheduleTask, asOfIso: string, holidays: string[]) {
+  return !task.start_date || !task.end_date || !task.responsible || isDelayedTask(task, asOfIso, holidays)
 }
 
-function criticalScore(task: MacroScheduleTask, asOfIso: string) {
+function criticalScore(task: MacroScheduleTask, asOfIso: string, holidays: string[]) {
   let score = 0
   if (isOverdueTask(task, asOfIso)) score += 4
-  if (isProgressBehind(task)) score += 3
+  if (isProgressBehind(task, asOfIso, holidays)) score += 3
   if (!task.responsible) score += 2
   if (!task.start_date || !task.end_date) score += 1
   return score
@@ -300,26 +304,27 @@ function isOverdueTask(task: MacroScheduleTask, asOfIso: string) {
   return Boolean(task.end_date && task.end_date < asOfIso && task.real_pct < 100)
 }
 
-function isProgressBehind(task: MacroScheduleTask) {
-  return task.planned_pct > 0 && task.real_pct + 5 < task.planned_pct
+function isProgressBehind(task: MacroScheduleTask, asOfIso = toLocalIsoDate(new Date()), holidays: string[] = []) {
+  const planned = effectivePlannedPct(task, asOfIso, holidays)
+  return planned > 0 && task.real_pct + 5 < planned
 }
 
-function isDelayedTask(task: MacroScheduleTask, asOfIso: string) {
-  return isOverdueTask(task, asOfIso) || isProgressBehind(task)
+function isDelayedTask(task: MacroScheduleTask, asOfIso: string, holidays: string[] = []) {
+  return isOverdueTask(task, asOfIso) || isProgressBehind(task, asOfIso, holidays)
 }
 
 function isCheckpoint(task: MacroScheduleTask) {
   return task.is_milestone || task.start_date === task.end_date || /go[- ]?live|cutover|quality gate|gate|marco/i.test(task.title)
 }
 
-function checkpointStatus(task: MacroScheduleTask, asOfIso: string): CheckpointSummary['status'] {
+function checkpointStatus(task: MacroScheduleTask, asOfIso: string, holidays: string[]): CheckpointSummary['status'] {
   if (task.real_pct >= 100) return 'Concluido'
   if (isOverdueTask(task, asOfIso)) return 'Vencido'
-  if (isProgressBehind(task)) return 'Atencao'
+  if (isProgressBehind(task, asOfIso, holidays)) return 'Atencao'
   return 'Futuro'
 }
 
-function buildCheckpoints(tasks: MacroScheduleTask[], asOfIso: string): CheckpointSummary[] {
+function buildCheckpoints(tasks: MacroScheduleTask[], asOfIso: string, holidays: string[]): CheckpointSummary[] {
   const statusWeight: Record<CheckpointSummary['status'], number> = {
     Vencido: 0,
     Atencao: 1,
@@ -329,7 +334,7 @@ function buildCheckpoints(tasks: MacroScheduleTask[], asOfIso: string): Checkpoi
 
   return tasks
     .filter(isCheckpoint)
-    .map((task) => ({ task, status: checkpointStatus(task, asOfIso) }))
+    .map((task) => ({ task, status: checkpointStatus(task, asOfIso, holidays) }))
     .sort((a, b) => statusWeight[a.status] - statusWeight[b.status] || String(a.task.end_date ?? '').localeCompare(String(b.task.end_date ?? '')))
 }
 
@@ -341,7 +346,7 @@ function summarizePhase(phase: MacroSchedulePhase, tasks: MacroScheduleTask[], h
     phase,
     phaseNumber: macroPhaseToPhaseNumber(phase),
     realPct: Math.round((ev / weight) * 100),
-    delayed: phaseTasks.filter((task) => isDelayedTask(task, asOfIso)).length,
+    delayed: phaseTasks.filter((task) => isDelayedTask(task, asOfIso, holidays)).length,
     overdue: phaseTasks.filter((task) => isOverdueTask(task, asOfIso)).length,
     missingSchedule: phaseTasks.filter((task) => !task.start_date || !task.end_date).length,
     completed: phaseTasks.filter((task) => task.real_pct >= 100).length,
@@ -357,7 +362,7 @@ function summarizeSquads(tasks: MacroScheduleTask[], holidays: string[], asOfIso
   })
   return Array.from(groups.entries()).map(([squad, items]) => {
     const plannedHours = items.reduce((sum, task) => sum + taskWeight(task, holidays), 0)
-    const pv = items.reduce((sum, task) => sum + taskWeight(task, holidays) * plannedFraction(task, asOfIso, new Date(`${asOfIso}T12:00:00`)), 0)
+    const pv = items.reduce((sum, task) => sum + taskWeight(task, holidays) * plannedFraction(task, asOfIso, new Date(`${asOfIso}T12:00:00`), holidays), 0)
     const ev = items.reduce((sum, task) => sum + taskWeight(task, holidays) * task.real_pct / 100, 0)
     return {
       squad,
@@ -366,7 +371,7 @@ function summarizeSquads(tasks: MacroScheduleTask[], holidays: string[], asOfIso
       pv,
       ev,
       spi: calcLineSPI(ev, pv),
-      delayed: items.filter((task) => isDelayedTask(task, asOfIso)).length,
+      delayed: items.filter((task) => isDelayedTask(task, asOfIso, holidays)).length,
       overdue: items.filter((task) => isOverdueTask(task, asOfIso)).length,
     }
   }).sort((a, b) => b.delayed - a.delayed || (a.spi ?? 99) - (b.spi ?? 99))

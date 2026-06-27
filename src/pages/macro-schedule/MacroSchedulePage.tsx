@@ -35,6 +35,7 @@ import {
   clampNumber,
   countBusinessDays,
   createEmptyMacroTask,
+  effectivePlannedPct,
   formatSPI,
   isMilestoneLike,
   normalizeMacroTasksForSave,
@@ -43,6 +44,7 @@ import {
   renumberWbs,
   seedMacroScheduleTasks,
   sortMacroTasks,
+  todayIso,
 } from '@/lib/macroSchedule'
 import type { CreateMacroScheduleTaskInput, MacroSchedulePhase, MacroScheduleTask, MacroScheduleZoom } from '@/types'
 
@@ -486,6 +488,7 @@ function ScheduleTable({ rows, selected, holidays, onSelect, onChange, onIndent,
           {rows.map((row, index) => {
             const milestone = isMilestoneLike(row)
             const hasChildren = Boolean(rows[index + 1] && rows[index + 1].level > row.level)
+            const effectivePlan = effectivePlannedPct(row, todayIso(), holidays)
             return (
               <tr key={row.id} className={hasChildren ? 'selected' : undefined}>
                 <td>
@@ -519,8 +522,17 @@ function ScheduleTable({ rows, selected, holidays, onSelect, onChange, onIndent,
                 </td>
                 <td>{countBusinessDays(row.start_date, row.end_date, holidays, milestone)}</td>
                 <td><NumberCell value={row.real_pct} onChange={(real_pct) => onChange(row.id, { real_pct })} /></td>
-                <td><NumberCell value={row.planned_pct} onChange={(planned_pct) => onChange(row.id, { planned_pct })} /></td>
-                <td><span className={spiClass(calcLineSPI(row.real_pct, row.planned_pct))}>{formatSPI(row.real_pct, row.planned_pct)}</span></td>
+                <td>
+                  <div className="flex flex-col gap-1">
+                    <NumberCell value={row.planned_pct} onChange={(planned_pct) => onChange(row.id, { planned_pct })} />
+                    {!row.planned_pct && effectivePlan > 0 ? (
+                      <span className="text-[10px] font-semibold text-brand-600" title="Calculado automaticamente por datas úteis até hoje.">
+                        auto {effectivePlan}%
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+                <td><span className={spiClass(calcLineSPI(row.real_pct, effectivePlan))}>{formatSPI(row.real_pct, effectivePlan)}</span></td>
                 <td><input className="input min-w-[100px]" placeholder="ex: 5, 12" value={row.predecessors.join(', ')} onChange={(event) => onChange(row.id, { predecessors: parsePredecessors(event.target.value) })} /></td>
                 <td><NumberCell max={99999} value={row.hours} onChange={(hours) => onChange(row.id, { hours })} /></td>
                 <td>
@@ -652,6 +664,7 @@ function IconAction({ children, label, danger, onClick }: { children: React.Reac
 }
 
 function taskToExcelRow(row: MacroRow, index: number, holidays: string[]) {
+  const plannedEffective = effectivePlannedPct(row, todayIso(), holidays)
   return {
     '#': index + 1,
     WBS: row.wbs,
@@ -665,7 +678,8 @@ function taskToExcelRow(row: MacroRow, index: number, holidays: string[]) {
     Dias: countBusinessDays(row.start_date, row.end_date, holidays, row.is_milestone),
     '% Real': row.real_pct,
     '% Plan.': row.planned_pct,
-    SPI: formatSPI(row.real_pct, row.planned_pct),
+    '% Plan. Efetivo': plannedEffective,
+    SPI: formatSPI(row.real_pct, plannedEffective),
     'Pred.': row.predecessors.join(', '),
     Horas: row.hours,
     Marco: row.is_milestone ? 'Sim' : 'Não',
