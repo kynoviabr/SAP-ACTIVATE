@@ -95,8 +95,8 @@ export default function ScheduleReportsPage() {
 
       <section className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <Kpi title="SPI" value={report.spiText} detail={report.spiStatus} icon={<Gauge className="h-5 w-5" />} tone={report.spiTone} info="Schedule Performance Index. Mede eficiência do cronograma: EV dividido por PV. Abaixo de 1 indica atraso; acima de 1 indica avanço sobre o planejado." />
-        <Kpi title="PV" value={`${report.pv.toFixed(0)}h`} detail={`${report.plannedPct}% planejado`} icon={<TrendingUp className="h-5 w-5" />} info="Planned Value. Representa o volume de horas que deveria estar concluído até hoje, usando o % planejado e o peso em horas de cada tarefa." />
-        <Kpi title="EV" value={`${report.ev.toFixed(0)}h`} detail={`${report.realPct}% realizado`} icon={<CheckCircle2 className="h-5 w-5" />} info="Earned Value. Representa as horas efetivamente ganhas pelo avanço real do cronograma, calculadas pelo % realizado de cada tarefa." />
+        <Kpi title="PV" value={`${report.pv.toFixed(0)}h`} detail={`${report.plannedPct}% planejado`} icon={<TrendingUp className="h-5 w-5" />} info="Planned Value em horas ponderadas. Usa o peso da tarefa informado em Peso (h)/Horas; se vazio, usa dias úteis x 8. Fórmula: peso x % planejado efetivo." />
+        <Kpi title="EV" value={`${report.ev.toFixed(0)}h`} detail={`${report.realPct}% realizado`} icon={<CheckCircle2 className="h-5 w-5" />} info="Earned Value em horas ponderadas. Usa o mesmo peso da tarefa de PV e multiplica pelo % Real aceito. Fórmula: peso x % Real." />
         <Kpi title="SV" value={`${report.sv >= 0 ? '+' : ''}${report.sv.toFixed(0)}h`} detail={report.sv >= 0 ? 'Adiantado' : 'Atrasado'} icon={<AlertTriangle className="h-5 w-5" />} tone={report.sv >= 0 ? 'green' : 'red'} info="Schedule Variance. Diferença entre EV e PV. Valor negativo mostra déficit de execução em horas; valor positivo mostra avanço sobre o plano." />
         <Kpi title="Atrasos" value={String(report.delayedTasks.length)} detail={`${report.overdueTasks.length} vencida(s)`} icon={<AlertTriangle className="h-5 w-5" />} tone={report.delayedTasks.length ? 'red' : 'green'} info="Conta tarefas com % Real abaixo do % Plan. por mais de 5 pontos ou tarefas vencidas pela data final e ainda não concluídas." />
         <Kpi title="Forecast" value={report.forecastLabel} detail={report.forecastDetail} icon={<CalendarClock className="h-5 w-5" />} tone={report.forecastTone} info="Projeção simples da data final baseada no SPI atual. Quanto menor o SPI, maior a tendência de extensão do prazo planejado." />
@@ -131,7 +131,7 @@ export default function ScheduleReportsPage() {
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr]">
-        <ChartCard title="EVM em horas" badge="PV / EV">
+        <ChartCard title="EVM em horas ponderadas" badge="PV / EV">
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={report.evmBars} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
               <CartesianGrid stroke="#2e3460" strokeDasharray="3 3" />
@@ -270,7 +270,7 @@ export default function ScheduleReportsPage() {
 
       <footer className="mt-4 flex flex-wrap items-center gap-3 text-xs text-text-muted">
         <span>Última sincronização: {lastSyncedAt ? lastSyncedAt.toLocaleString('pt-BR') : 'local'}</span>
-        <span>Modelo EVM operacional por horas planejadas; histórico real será refinado quando houver snapshots diários.</span>
+        <span>PV/EV usam Peso (h)/Horas por tarefa; se vazio, fallback = dias úteis x 8. Para EVM monetário completo, preencher BAC/AC no template PMI/EVM.</span>
         {isLoading || projectQuery.isLoading ? <span>Carregando indicadores...</span> : null}
       </footer>
     </div>

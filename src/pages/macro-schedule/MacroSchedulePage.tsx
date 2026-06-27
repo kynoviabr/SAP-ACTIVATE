@@ -492,7 +492,7 @@ function ScheduleTable({ rows, selected, holidays, onSelect, onChange, onIndent,
             <th>% Plan.</th>
             <th>SPI</th>
             <th>Pred.</th>
-            <th>Horas</th>
+            <th title="Peso da tarefa para PV/EV. Informe horas planejadas; se ficar vazio, o relatório usa dias úteis x 8.">% Peso (h)</th>
             <th>Ações</th>
           </tr>
         </thead>
@@ -691,7 +691,7 @@ function buildPmiScheduleSheet(xlsx: typeof import('xlsx')) {
     '% Plan.',
     'SPI',
     'Pred.',
-    'Horas',
+    'Peso (h)',
     'Marco',
     'Nivel',
     'EV Method',
@@ -786,7 +786,7 @@ function buildPmiDictionarySheet(xlsx: typeof import('xlsx')) {
     ['% Real', 'Sim', 'Progresso físico aceito. Não deve ser substituído por esforço gasto.'],
     ['% Plan.', 'Calculado', 'Calculado por dias úteis até a Status Date; pode ser sobrescrito quando houver curva planejada aprovada.'],
     ['% Aloc', 'Não para SPI', 'Percentual de capacidade do recurso. Não entra no cálculo de SPI/PV/EV.'],
-    ['Horas', 'Sim', 'Peso de esforço quando BAC não estiver disponível.'],
+    ['Peso (h)', 'Sim se BAC vazio', 'Peso de esforço da tarefa para PV/EV. Use horas planejadas aprovadas; se ficar vazio no sistema, a regra de fallback é dias úteis x 8.'],
     ['BAC', 'Recomendado', 'Budget at Completion. Quando preenchido, PV/EV usam valor monetário em vez de horas.'],
     ['AC', 'Para CPI', 'Actual Cost. Necessário para CPI e CV.'],
     ['PV', 'Calculado', 'Planned Value: BAC ou Horas multiplicado pelo % planejado.'],
@@ -837,7 +837,7 @@ function taskToExcelRow(row: MacroRow, index: number, holidays: string[]) {
     '% Plan. Efetivo': plannedEffective,
     SPI: formatSPI(row.real_pct, plannedEffective),
     'Pred.': row.predecessors.join(', '),
-    Horas: row.hours,
+    'Peso (h)': row.hours,
     Marco: row.is_milestone ? 'Sim' : 'Não',
     Nivel: row.level,
   }
@@ -854,7 +854,7 @@ function excelRowToTask(row: Record<string, unknown>, index: number, projectId: 
   const start = normalizeDate(get('Início', 'Inicio', 'Start', 'Baseline Start', 'Data Inicio Baseline', 'Data Início Baseline'), xlsx)
   const end = normalizeDate(get('Fim', 'Finish', 'End', 'Baseline Finish', 'Data Fim Baseline'), xlsx)
   const milestone = String(get('Marco', 'Milestone')).toLowerCase().startsWith('s') || start === end
-  const plannedHours = Math.max(0, Number(get('Horas', 'Work', 'Planned Work Hours', 'Horas Planejadas') || 0))
+  const plannedHours = Math.max(0, Number(get('Peso (h)', 'Horas', 'Work', 'Planned Work Hours', 'Horas Planejadas', 'Peso') || 0))
   const costBaseline = Math.max(0, Number(get('BAC', 'Budget at Completion', 'Orcamento Baseline', 'Orçamento Baseline') || 0))
   return {
     project_id: projectId,
