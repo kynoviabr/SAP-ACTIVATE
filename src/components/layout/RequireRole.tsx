@@ -4,7 +4,7 @@ import EmptyState from '../ui/EmptyState'
 import LoadingScreen from '../ui/LoadingScreen'
 import { useAuthStore } from '../../store'
 
-type Role = 'USER' | 'ADM' | 'SUPER_ADMIN'
+type Role = 'SUPER_ADMIN' | 'ADMIN' | 'USER' | 'VIEWER'
 
 interface RequireRoleProps {
   children: ReactNode

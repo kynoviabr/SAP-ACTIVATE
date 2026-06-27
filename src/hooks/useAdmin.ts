@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { adminDB } from '@/lib/database'
 import { useAuthStore } from '@/store'
 import { applyTenantTheme } from '@/lib/utils'
-import type { Tenant, User, UserRole } from '@/types'
+import type { CreateTenantInput, Tenant, TenantContact, TenantContactInput, UpdateTenantInput, User, UserRole } from '@/types'
 
 const demoUsers: User[] = [
   {
@@ -35,15 +35,76 @@ const demoUsers: User[] = [
   },
 ]
 
+const demoTenants: Tenant[] = [
+  {
+    id: 'demo-tenant',
+    tenant_id: 'demo-tenant',
+    slug: 'kynovia-demo',
+    name: 'Kynovia Demo',
+    legal_name: 'Kynovia Tecnologia Ltda',
+    trade_name: 'Kynovia',
+    cnpj: '12.ABC.345/0001-90',
+    company_email: 'contato@kynovia.com.br',
+    company_whatsapp: '+55 11 99999-0000',
+    city: 'Sao Paulo',
+    state: 'SP',
+    country: 'Brasil',
+    primary_color: '#3B4FE8',
+    secondary_color: '#1E2A78',
+    accent_color: '#F59E0B',
+    plan: 'professional',
+    billing_model: 'per_project',
+    billing_status: 'active',
+    project_unit_price: 0,
+    billing_currency: 'BRL',
+    max_projects: 10,
+    max_users: 50,
+    ai_provider: 'openai',
+    ai_model: 'gpt-4-turbo',
+    active: true,
+    created_at: '2026-06-01T00:00:00.000Z',
+  },
+]
+
+const demoContacts: TenantContact[] = [
+  {
+    id: 'demo-contact-admin',
+    tenant_id: 'demo-tenant',
+    contact_type: 'admin',
+    full_name: 'Administrador Cliente',
+    job_title: 'Diretor de Tecnologia',
+    email: 'admin@cliente.com.br',
+    whatsapp: '+55 11 98888-0000',
+    sort_order: 0,
+    active: true,
+    created_at: '2026-06-01T00:00:00.000Z',
+  },
+  {
+    id: 'demo-contact-billing',
+    tenant_id: 'demo-tenant',
+    contact_type: 'billing',
+    full_name: 'Responsavel Financeiro',
+    job_title: 'Faturamento',
+    email: 'financeiro@cliente.com.br',
+    whatsapp: '+55 11 97777-0000',
+    sort_order: 1,
+    active: true,
+    created_at: '2026-06-01T00:00:00.000Z',
+  },
+]
+
 export function useAdmin() {
   const qc = useQueryClient()
   const currentUser = useAuthStore((s) => s.user)
   const tenant = useAuthStore((s) => s.tenant)
   const setTenant = useAuthStore((s) => s.setTenant)
   const [demoState, setDemoState] = useState(demoUsers)
+  const [demoTenantState, setDemoTenantState] = useState(demoTenants)
+  const [demoContactState, setDemoContactState] = useState(demoContacts)
   const isDemo = currentUser?.id === 'demo-user'
+  const isPlatformAdmin = currentUser?.role === 'SUPER_ADMIN'
   const hasSupabaseEnv = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY)
-  const realDbEnabled = hasSupabaseEnv && !isDemo && currentUser?.role === 'ADMIN'
+  const realDbEnabled = hasSupabaseEnv && !isDemo && (currentUser?.role === 'ADMIN' || isPlatformAdmin)
 
   const usersQuery = useQuery({
     queryKey: ['admin', 'users'],
@@ -53,6 +114,23 @@ export function useAdmin() {
   })
 
   const users = usersQuery.data ?? (isDemo ? demoState : [])
+
+  const tenantsQuery = useQuery({
+    queryKey: ['admin', 'tenants'],
+    queryFn: adminDB.listTenants,
+    enabled: realDbEnabled && isPlatformAdmin,
+    staleTime: 30_000,
+  })
+
+  const contactsQuery = useQuery({
+    queryKey: ['admin', 'tenant-contacts', isPlatformAdmin ? 'all' : tenant?.id],
+    queryFn: () => adminDB.listTenantContacts(isPlatformAdmin ? undefined : tenant?.id),
+    enabled: realDbEnabled && Boolean(isPlatformAdmin || tenant?.id),
+    staleTime: 30_000,
+  })
+
+  const tenants = tenantsQuery.data ?? (isDemo ? demoTenantState : tenant ? [tenant] : [])
+  const tenantContacts = contactsQuery.data ?? (isDemo ? demoContactState : [])
 
   const summary = useMemo(() => ({
     total: users.length,
@@ -113,16 +191,100 @@ export function useAdmin() {
     },
   })
 
+  const createTenant = useMutation({
+    mutationFn: async ({ tenant: input, contacts }: { tenant: CreateTenantInput; contacts: TenantContactInput[] }) => {
+      if (!isDemo) {
+        const created = await adminDB.createTenant(input)
+        const savedContacts = await Promise.all(
+          contacts.map((contact) => adminDB.createTenantContact({ ...contact, tenant_id: created.id }))
+        )
+        return { tenant: created, contacts: savedContacts }
+      }
+
+      const created: Tenant = {
+        tenant_id: `demo-tenant-${Date.now()}`,
+        primary_color: '#3B4FE8',
+        secondary_color: '#1E2A78',
+        accent_color: '#F59E0B',
+        plan: 'professional',
+        billing_model: 'per_project',
+        billing_status: 'active',
+        billing_currency: 'BRL',
+        max_projects: 10,
+        max_users: 50,
+        ai_provider: 'openai',
+        ai_model: 'gpt-4-turbo',
+        active: true,
+        created_at: new Date().toISOString(),
+        ...input,
+        id: `demo-tenant-${Date.now()}`,
+      }
+      const savedContacts = contacts.map((contact, index): TenantContact => ({
+        ...contact,
+        id: `demo-contact-${Date.now()}-${index}`,
+        tenant_id: created.id,
+        created_at: new Date().toISOString(),
+      }))
+      setDemoTenantState((items) => [created, ...items])
+      setDemoContactState((items) => [...savedContacts, ...items])
+      return { tenant: created, contacts: savedContacts }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tenants'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'tenant-contacts'] })
+    },
+  })
+
+  const updateTenantById = useMutation({
+    mutationFn: async ({ tenantId, input }: { tenantId: string; input: UpdateTenantInput }) => {
+      if (!isDemo) return adminDB.updateTenantById(tenantId, input)
+      let updated = demoTenantState.find((item) => item.id === tenantId) as Tenant
+      setDemoTenantState((items) => items.map((item) => {
+        if (item.id !== tenantId) return item
+        updated = { ...item, ...input }
+        return updated
+      }))
+      return updated
+    },
+    onSuccess: (updatedTenant) => {
+      if (updatedTenant.id === tenant?.id) {
+        setTenant(updatedTenant)
+        applyTenantTheme(updatedTenant)
+      }
+      qc.invalidateQueries({ queryKey: ['admin', 'tenants'] })
+    },
+  })
+
+  const updateTenantContact = useMutation({
+    mutationFn: async ({ contactId, input }: { contactId: string; input: Partial<TenantContactInput> }) => {
+      if (!isDemo) return adminDB.updateTenantContact(contactId, input)
+      let updated = demoContactState.find((item) => item.id === contactId) as TenantContact
+      setDemoContactState((items) => items.map((item) => {
+        if (item.id !== contactId) return item
+        updated = { ...item, ...input }
+        return updated
+      }))
+      return updated
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'tenant-contacts'] }),
+  })
+
   return {
     users,
     tenant,
+    tenants,
+    tenantContacts,
     summary,
     isDemo,
+    isPlatformAdmin,
     isLoading: realDbEnabled ? usersQuery.isLoading : false,
     error: usersQuery.error,
     updateRole,
     updateActive,
     updateProfile,
     updateTenant,
+    createTenant,
+    updateTenantById,
+    updateTenantContact,
   }
 }

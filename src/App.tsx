@@ -38,7 +38,7 @@ function RequireAuth() {
 
 function RequireAdmin() {
   const { user } = useAuthStore()
-  if (user?.role !== 'ADMIN') return <Navigate to="/home" replace />
+  if (user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN') return <Navigate to="/home" replace />
   return <Outlet />
 }
 

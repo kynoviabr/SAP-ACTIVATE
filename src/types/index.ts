@@ -1,5 +1,5 @@
 // ── Enums ─────────────────────────────────────────────────────
-export type UserRole      = 'ADMIN' | 'USER' | 'VIEWER'
+export type UserRole      = 'SUPER_ADMIN' | 'ADMIN' | 'USER' | 'VIEWER'
 export type ProjectStatus = 'verde' | 'amarelo' | 'vermelho' | 'encerrado'
 export type PhaseNumber   = '1' | '2' | '3' | '4' | '5'
 export type TaskStatus    = 'pendente' | 'em_andamento' | 'concluido' | 'atrasado' | 'cancelado'
@@ -34,12 +34,35 @@ export interface BaseEntity {
 export interface Tenant extends BaseEntity {
   slug: string
   name: string
+  legal_name?: string
+  trade_name?: string
+  cnpj?: string
+  state_registration?: string
+  municipal_registration?: string
+  tax_regime?: string
+  company_email?: string
+  company_phone?: string
+  company_whatsapp?: string
+  website?: string
+  zip_code?: string
+  address_line?: string
+  address_number?: string
+  address_complement?: string
+  district?: string
+  city?: string
+  state?: string
+  country?: string
   logo_url?: string
   primary_color: string
   secondary_color: string
   accent_color: string
   domain?: string
   plan: 'free' | 'professional' | 'enterprise'
+  billing_model?: 'per_project'
+  billing_status?: 'trial' | 'active' | 'paused' | 'cancelled'
+  project_unit_price?: number
+  billing_currency?: 'BRL'
+  billing_notes?: string
   max_projects: number
   max_users: number
   ai_provider: AIProvider
@@ -56,6 +79,23 @@ export interface User extends BaseEntity {
   active: boolean
   last_login?: string
 }
+
+export type TenantContactType = 'admin' | 'billing' | 'additional'
+
+export interface TenantContact extends BaseEntity {
+  contact_type: TenantContactType
+  full_name: string
+  job_title?: string
+  email: string
+  whatsapp?: string
+  notes?: string
+  sort_order: number
+  active: boolean
+}
+
+export type CreateTenantInput = Pick<Tenant, 'slug' | 'name'> & Partial<Omit<Tenant, keyof BaseEntity | 'slug' | 'name'>>
+export type UpdateTenantInput = Partial<CreateTenantInput>
+export type TenantContactInput = Omit<TenantContact, 'id' | 'created_at' | 'updated_at'>
 
 // ── Project ───────────────────────────────────────────────────
 export interface Project extends BaseEntity {

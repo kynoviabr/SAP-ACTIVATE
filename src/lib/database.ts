@@ -12,7 +12,7 @@ import type {
   ChangeRequest, CreateChangeRequestInput, UpdateChangeRequestInput,
   BillingItem, CreateBillingInput, UpdateBillingInput,
   TravelItem, CreateTravelInput, UpdateTravelInput,
-  User, Tenant, UserRole,
+  User, Tenant, UserRole, TenantContact, CreateTenantInput, UpdateTenantInput, TenantContactInput,
 } from '@/types'
 
 async function q<T>(fn: () => PromiseLike<{ data: T | null; error: unknown }>): Promise<T> {
@@ -254,6 +254,24 @@ export const adminDB = {
   listUsers: () => q<User[]>(() =>
     supabase.from('users').select('*').order('created_at', { ascending: false })
   ),
+  listTenants: () => q<Tenant[]>(() =>
+    supabase.from('tenants').select('*').order('created_at', { ascending: false })
+  ),
+  createTenant: (input: CreateTenantInput) =>
+    q<Tenant>(() => supabase.from('tenants').insert(input).select().single()),
+  updateTenantById: (id: string, input: UpdateTenantInput) =>
+    q<Tenant>(() => supabase.from('tenants').update(input).eq('id', id).select().single()),
+  listTenantContacts: (tenantId?: string) => q<TenantContact[]>(() => {
+    let query = supabase.from('tenant_contacts').select('*').eq('active', true).order('tenant_id').order('sort_order')
+    if (tenantId) query = query.eq('tenant_id', tenantId)
+    return query
+  }),
+  createTenantContact: (input: TenantContactInput) =>
+    q<TenantContact>(() => supabase.from('tenant_contacts').insert(input).select().single()),
+  updateTenantContact: (id: string, input: Partial<TenantContactInput>) =>
+    q<TenantContact>(() => supabase.from('tenant_contacts').update(input).eq('id', id).select().single()),
+  deleteTenantContact: (id: string) =>
+    q<TenantContact>(() => supabase.from('tenant_contacts').update({ active: false }).eq('id', id).select().single()),
   updateUser: (id: string, input: Partial<Pick<User, 'full_name' | 'role' | 'active' | 'avatar_url'>>) =>
     q<User>(() => supabase.from('users').update(input).eq('id', id).select().single()),
   updateUserRole: (id: string, role: UserRole) =>
