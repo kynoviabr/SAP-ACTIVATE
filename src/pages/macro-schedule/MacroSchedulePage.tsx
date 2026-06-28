@@ -66,6 +66,27 @@ type MacroView = 'schedule' | 'timeline' | 'measurements'
 
 const zoomLabels = MACRO_ZOOM_LABELS
 
+const BASIC_EXPORT_HEADERS = [
+  '#',
+  'WBS',
+  'Tarefa',
+  'Fase',
+  'Squad',
+  'Responsável',
+  '% Aloc',
+  'Início',
+  'Fim',
+  'Dias',
+  '% Real',
+  '% Plan.',
+  '% Plan. Efetivo',
+  'SPI',
+  'Pred.',
+  'Peso (h)',
+  'Marco',
+  'Nivel',
+] as const
+
 export default function MacroSchedulePage() {
   const { projectId = 'local' } = useParams()
   const navigate = useNavigate()
@@ -268,13 +289,10 @@ export default function MacroSchedulePage() {
 
   async function exportExcel() {
     const XLSX = await import('xlsx')
-    const worksheet = XLSX.utils.json_to_sheet(normalizedRows.map((row, index) => taskToExcelRow(row, index, holidayDates)))
-    worksheet['!cols'] = [
-      { wch: 5 }, { wch: 8 }, { wch: 42 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 8 }, { wch: 12 },
-      { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 14 }, { wch: 10 },
-    ]
     const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Cronograma Macro')
+    XLSX.utils.book_append_sheet(workbook, buildBasicScheduleSheet(XLSX, normalizedRows, holidayDates), 'Cronograma Macro')
+    XLSX.utils.book_append_sheet(workbook, buildBasicInstructionsSheet(XLSX), 'Instrucoes')
+    XLSX.utils.book_append_sheet(workbook, buildPmiListsSheet(XLSX), 'Listas')
     XLSX.writeFile(workbook, `cronograma-macro-${projectId}.xlsx`)
   }
 
@@ -303,7 +321,11 @@ export default function MacroSchedulePage() {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
-      const imported = data.map((row, index) => excelRowToTask(row, index, projectId, XLSX)).map(withLocalId)
+      const imported = data.filter(hasScheduleRowData).map((row, index) => excelRowToTask(row, index, projectId, XLSX)).map(withLocalId)
+      if (!imported.length) {
+        setMessage('Nenhuma tarefa valida encontrada. Verifique se a aba tem cabecalhos e ao menos a coluna Tarefa preenchida.')
+        return
+      }
       setMessage('Salvando carga do Excel...')
       const saved = await replaceTasks(imported)
       setPreserveWbs(false)
@@ -906,6 +928,40 @@ function IconAction({ children, label, danger, disabled = false, onClick }: { ch
   )
 }
 
+function buildBasicScheduleSheet(xlsx: typeof import('xlsx'), rows: MacroRow[], holidays: string[]) {
+  const body = rows.map((row, index) => {
+    const item = taskToExcelRow(row, index, holidays)
+    return BASIC_EXPORT_HEADERS.map((header) => item[header] ?? '')
+  })
+  const worksheet = xlsx.utils.aoa_to_sheet([[...BASIC_EXPORT_HEADERS], ...body])
+  worksheet['!cols'] = [
+    { wch: 5 }, { wch: 10 }, { wch: 42 }, { wch: 12 }, { wch: 16 }, { wch: 22 }, { wch: 8 }, { wch: 12 },
+    { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 14 }, { wch: 8 }, { wch: 14 }, { wch: 10 },
+    { wch: 8 }, { wch: 8 },
+  ]
+  worksheet['!autofilter'] = { ref: `A1:R${Math.max(1, body.length + 1)}` }
+  worksheet['!freeze'] = { xSplit: 0, ySplit: 1 }
+  return worksheet
+}
+
+function buildBasicInstructionsSheet(xlsx: typeof import('xlsx')) {
+  const worksheet = xlsx.utils.aoa_to_sheet([
+    ['Cronograma Macro - Importacao/Exportacao'],
+    ['Aba principal', 'Cronograma Macro'],
+    ['Uso', 'Preencha ou revise as colunas da aba Cronograma Macro. A carga de novo cronograma substitui o cronograma atual.'],
+    ['Campos minimos', 'WBS, Tarefa, Fase, Inicio, Fim, % Real e Peso (h).'],
+    ['Fase', 'Use Prepare, Explore, Realize, Deploy ou Run.'],
+    ['Datas', 'Use datas reais do Excel. Se digitar texto, prefira yyyy-mm-dd.'],
+    ['% Plan.', 'Pode ficar vazio quando o sistema deve calcular planejado por datas uteis; para auditoria use baseline e cortes.'],
+    ['% Real', 'Informe progresso fisico aceito na data de corte.'],
+    ['Peso (h)', 'Peso planejado da tarefa para SPI/Curva-S. Nao use % de alocacao como peso.'],
+    ['Marco', 'Use Sim para milestone com inicio = fim.'],
+    ['Pred.', 'Informe predecessoras por numero de linha, por exemplo: 5, 12.'],
+  ])
+  worksheet['!cols'] = [{ wch: 26 }, { wch: 110 }]
+  return worksheet
+}
+
 function buildPmiScheduleSheet(xlsx: typeof import('xlsx')) {
   const headers = [
     '#',
@@ -1072,6 +1128,28 @@ function taskToExcelRow(row: MacroRow, index: number, holidays: string[]) {
     Marco: row.is_milestone ? 'Sim' : 'Não',
     Nivel: row.level,
   }
+}
+
+function hasScheduleRowData(row: Record<string, unknown>) {
+  const keys = [
+    'Tarefa',
+    'Name',
+    'Task Name',
+    'Nome da Tarefa',
+    'WBS',
+    'Início',
+    'Inicio',
+    'Start',
+    'Baseline Start',
+    'Fim',
+    'Finish',
+    'End',
+    'Baseline Finish',
+  ]
+  return keys.some((key) => {
+    const value = row[key]
+    return value !== undefined && value !== null && String(value).trim() !== ''
+  })
 }
 
 function excelRowToTask(row: Record<string, unknown>, index: number, projectId: string, xlsx: typeof import('xlsx')): CreateMacroScheduleTaskInput {
